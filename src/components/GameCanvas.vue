@@ -80,10 +80,15 @@ const targetFPS = 60
 const frameInterval = 1000 / targetFPS // Target 60 FPS
 let deltaTime = 0
 
+// Rally tracking
+let isFirstReturn = ref(false) // Track if waiting for first return after serve
+let serverJustServed = ref(false) // Track if server just served and needs to move in
+
 // Physics constants (per second, will be scaled by deltaTime)
 const BALL_BASE_SPEED = 480 // pixels per second
 const COMPUTER_BASE_SPEED = 270 // pixels per second
 const BALL_ACCELERATION = 1.05 // 5% speed increase per hit
+const PADDLE_MOVE_SPEED = 180 // Speed for moving paddles into court after serve
 
 // Court dimensions (properly scaled)
 const court = {
@@ -112,17 +117,21 @@ const playerPaddle = {
   x: 100,
   y: 250,
   width: 15,
-  height: 100,
+  height: 75, // Reduced from 100 to 75 (75% size)
   color: '#00c853',
-  targetY: 250 // For smooth mouse tracking
+  targetY: 250, // For smooth mouse tracking
+  targetX: 100, // For horizontal movement
+  isMovingIn: false // Track if paddle is moving into court
 }
 
 const computerPaddle = {
   x: 1085,
   y: 250,
   width: 15,
-  height: 100,
-  color: '#ff6b35'
+  height: 75, // Reduced from 100 to 75 (75% size)
+  color: '#ff6b35',
+  targetX: 1085, // For horizontal movement
+  isMovingIn: false // Track if paddle is moving into court
 }
 
 // Get serve position text
@@ -394,8 +403,18 @@ const draw = () => {
 
 const setupServe = () => {
   isServing.value = true
+  isFirstReturn.value = false
+  serverJustServed.value = false
   ball.value.speedX = 0
   ball.value.speedY = 0
+  
+  // Reset paddle positions - paddles start outside court for serve
+  playerPaddle.x = 100 // Outside left baseline
+  playerPaddle.targetX = 100
+  playerPaddle.isMovingIn = false
+  computerPaddle.x = 1085 // Outside right baseline
+  computerPaddle.targetX = 1085
+  computerPaddle.isMovingIn = false
   
   if (isPlayerServe.value) {
     // Player serves from behind baseline
@@ -462,7 +481,14 @@ const setupServe = () => {
         ball.value.speedX = velocity.speedX
         ball.value.speedY = velocity.speedY
         isServing.value = false
+        serverJustServed.value = true // Computer just served
+        isFirstReturn.value = true // Waiting for player's first return
         gameActive.value = true
+        
+        // Set computer paddle to move inside court after serving
+        computerPaddle.targetX = court.x + court.width - 40 // Inside right baseline
+        computerPaddle.isMovingIn = true
+        
         lastFrameTime = 0
         if (!animationId) gameLoop(performance.now())
       }
@@ -493,8 +519,14 @@ const handleServe = () => {
     ball.value.speedY = velocity.speedY
     
     isServing.value = false
+    serverJustServed.value = true // Player just served
+    isFirstReturn.value = true // Waiting for computer's first return
     gameActive.value = true
     gameStarted.value = true
+    
+    // Set player paddle to move inside court after serving
+    playerPaddle.targetX = court.x + 40 // Inside left baseline
+    playerPaddle.isMovingIn = true
     
     if (!startTime) {
       startTime = Date.now()
@@ -545,6 +577,13 @@ const update = (dt) => {
     ball.value.speedY = hitPos * 360 // pixels per second
     // Ensure ball doesn't get stuck in paddle
     ball.value.x = playerPaddle.x + playerPaddle.width + ball.value.radius
+    
+    // If this was the first return after computer served, move player paddle in
+    if (isFirstReturn.value && !isPlayerServe.value) {
+      playerPaddle.targetX = court.x + 40 // Inside left baseline
+      playerPaddle.isMovingIn = true
+      isFirstReturn.value = false
+    }
   }
   
   if (ball.value.x + ball.value.radius > computerPaddle.x &&
@@ -556,9 +595,39 @@ const update = (dt) => {
     ball.value.speedY = hitPos * 360 // pixels per second
     // Ensure ball doesn't get stuck in paddle
     ball.value.x = computerPaddle.x - ball.value.radius
+    
+    // If this was the first return after player served, move computer paddle in
+    if (isFirstReturn.value && isPlayerServe.value) {
+      computerPaddle.targetX = court.x + court.width - 40 // Inside right baseline
+      computerPaddle.isMovingIn = true
+      isFirstReturn.value = false
+    }
   }
   
-  // Smooth player paddle movement (lerp towards target) - only during play
+  // Handle horizontal paddle movement (moving into court after serve)
+  if (playerPaddle.isMovingIn) {
+    const diff = playerPaddle.targetX - playerPaddle.x
+    const moveSpeed = PADDLE_MOVE_SPEED * dt
+    if (Math.abs(diff) > moveSpeed) {
+      playerPaddle.x += diff > 0 ? moveSpeed : -moveSpeed
+    } else {
+      playerPaddle.x = playerPaddle.targetX
+      playerPaddle.isMovingIn = false
+    }
+  }
+  
+  if (computerPaddle.isMovingIn) {
+    const diff = computerPaddle.targetX - computerPaddle.x
+    const moveSpeed = PADDLE_MOVE_SPEED * dt
+    if (Math.abs(diff) > moveSpeed) {
+      computerPaddle.x += diff > 0 ? moveSpeed : -moveSpeed
+    } else {
+      computerPaddle.x = computerPaddle.targetX
+      computerPaddle.isMovingIn = false
+    }
+  }
+  
+  // Smooth player paddle vertical movement (lerp towards target) - only during play
   if (!isServing.value) {
     const paddleSpeed = 0.2 // Smoothing factor
     playerPaddle.y += (playerPaddle.targetY - playerPaddle.y) * paddleSpeed
@@ -578,7 +647,7 @@ const update = (dt) => {
     }
   }
   
-  // Keep paddles within court boundaries
+  // Keep paddles within court boundaries (vertical)
   computerPaddle.y = Math.max(court.y, Math.min(court.y + court.height - computerPaddle.height, computerPaddle.y))
   playerPaddle.y = Math.max(court.y, Math.min(court.y + court.height - playerPaddle.height, playerPaddle.y))
   playerPaddle.targetY = Math.max(court.y, Math.min(court.y + court.height - playerPaddle.height, playerPaddle.targetY))
@@ -716,6 +785,8 @@ const resetGame = () => {
   deltaTime = 0
   isPlayerServe.value = true
   isServing.value = true
+  isFirstReturn.value = false
+  serverJustServed.value = false
   
   // Reset ball position
   ball.value.x = -100 // Start off-screen
@@ -724,9 +795,16 @@ const resetGame = () => {
   ball.value.speedY = 0
   
   // Reset paddle positions
+  playerPaddle.x = 100
+  playerPaddle.targetX = 100
   playerPaddle.y = court.y + court.height / 2 - playerPaddle.height / 2
   playerPaddle.targetY = playerPaddle.y
+  playerPaddle.isMovingIn = false
+  
+  computerPaddle.x = 1085
+  computerPaddle.targetX = 1085
   computerPaddle.y = court.y + court.height / 2 - computerPaddle.height / 2
+  computerPaddle.isMovingIn = false
   
   if (animationId) {
     cancelAnimationFrame(animationId)
