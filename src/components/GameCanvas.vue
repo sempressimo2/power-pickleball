@@ -22,9 +22,6 @@
         <span class="serve-position" v-if="isServing">
           Serving from: {{ getServePosition() }}
         </span>
-        <span class="side-out-indicator" v-if="sideOutMessage">
-          {{ sideOutMessage }}
-        </span>
       </div>
       
       <div class="game-controls">
@@ -49,75 +46,15 @@
         :width="canvasWidth"
         :height="canvasHeight"
         @mousemove="handleMouseMove"
-        @touchstart="handleTouchStart"
         @touchmove="handleTouchMove"
-        @touchend="handleTouchEnd"
         @click="handleServe"
       ></canvas>
-      
-      <!-- Mobile Controls Overlay -->
-      <div v-if="isMobile" class="mobile-controls">
-        <!-- Left side touch zone for paddle movement -->
-        <div 
-          class="touch-zone left"
-          @touchstart="handleTouchZoneStart"
-          @touchmove="handleTouchZoneMove"
-          @touchend="handleTouchZoneEnd"
-        >
-          <div class="touch-hint" v-if="!gameStarted">
-            <i class="fas fa-hand-pointer"></i>
-            <span>Drag to move paddle</span>
-          </div>
-        </div>
-        
-        <!-- Right side serve button -->
-        <div class="touch-zone right">
-          <button 
-            v-if="isServing && isPlayerServe && !gameActive"
-            @click="handleServe"
-            class="mobile-serve-btn"
-          >
-            <i class="fas fa-table-tennis"></i>
-            <span>TAP TO SERVE</span>
-          </button>
-        </div>
-        
-        <!-- Mobile game controls -->
-        <div class="mobile-game-buttons">
-          <button 
-            @click="startGame" 
-            v-if="!gameActive && !isServing"
-            class="mobile-control-btn start"
-          >
-            <i class="fas fa-play"></i>
-          </button>
-          <button 
-            @click="pauseGame" 
-            v-if="gameActive"
-            class="mobile-control-btn pause"
-          >
-            <i class="fas fa-pause"></i>
-          </button>
-          <button 
-            @click="resetGame"
-            class="mobile-control-btn reset"
-          >
-            <i class="fas fa-redo"></i>
-          </button>
-        </div>
-      </div>
-    </div>
-    
-    <!-- Mobile orientation hint -->
-    <div v-if="isMobile && isPortrait" class="orientation-hint">
-      <i class="fas fa-mobile-alt"></i>
-      <p>Rotate device for better experience</p>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 
 const gameCanvas = ref(null)
 const canvasWrapper = ref(null)
@@ -130,13 +67,6 @@ const gameStarted = ref(false)
 const gameTime = ref('00:00')
 const isPlayerServe = ref(true)
 const isServing = ref(true)
-const sideOutMessage = ref('')
-
-// Mobile detection and controls
-const isMobile = ref(false)
-const isPortrait = ref(false)
-const touchStartY = ref(0)
-const isTouchActive = ref(false)
 
 let ctx = null
 let animationId = null
@@ -204,51 +134,6 @@ const computerPaddle = {
   isMovingIn: false // Track if paddle is moving into court
 }
 
-// Detect mobile device
-const detectMobile = () => {
-  const userAgent = navigator.userAgent || navigator.vendor || window.opera
-  isMobile.value = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent.toLowerCase()) ||
-                   ('ontouchstart' in window) ||
-                   (navigator.maxTouchPoints > 0)
-  
-  // Also check screen size
-  if (window.innerWidth <= 768) {
-    isMobile.value = true
-  }
-}
-
-// Check orientation
-const checkOrientation = () => {
-  isPortrait.value = window.innerHeight > window.innerWidth
-  
-  // Adjust canvas size for mobile
-  if (isMobile.value) {
-    const wrapper = canvasWrapper.value
-    if (wrapper) {
-      const rect = wrapper.getBoundingClientRect()
-      const aspectRatio = 1200 / 600
-      
-      if (isPortrait.value) {
-        // Portrait mode - scale down
-        canvasWidth.value = Math.min(1200, rect.width * 0.95)
-        canvasHeight.value = canvasWidth.value / aspectRatio
-      } else {
-        // Landscape mode - use more space
-        const maxWidth = Math.min(1200, rect.width * 0.98)
-        const maxHeight = Math.min(600, window.innerHeight * 0.7)
-        
-        if (maxWidth / maxHeight > aspectRatio) {
-          canvasHeight.value = maxHeight
-          canvasWidth.value = maxHeight * aspectRatio
-        } else {
-          canvasWidth.value = maxWidth
-          canvasHeight.value = maxWidth / aspectRatio
-        }
-      }
-    }
-  }
-}
-
 // Get serve position text
 const getServePosition = () => {
   if (isPlayerServe.value) {
@@ -256,65 +141,6 @@ const getServePosition = () => {
   } else {
     return computerScore.value % 2 === 0 ? 'Right Court' : 'Left Court'
   }
-}
-
-// Touch event handlers for mobile
-const handleTouchStart = (e) => {
-  if (isMobile.value && !isServing.value) {
-    e.preventDefault()
-    const touch = e.touches[0]
-    const rect = gameCanvas.value.getBoundingClientRect()
-    touchStartY.value = (touch.clientY - rect.top) * (canvasHeight.value / rect.height)
-    isTouchActive.value = true
-  }
-}
-
-const handleTouchMove = (e) => {
-  if (!isServing.value && isTouchActive.value) {
-    e.preventDefault()
-    const rect = gameCanvas.value.getBoundingClientRect()
-    const touch = e.touches[0]
-    const scaleY = canvasHeight.value / rect.height
-    const touchY = (touch.clientY - rect.top) * scaleY
-    playerPaddle.targetY = touchY - playerPaddle.height / 2
-  }
-}
-
-const handleTouchEnd = (e) => {
-  if (isMobile.value) {
-    e.preventDefault()
-    isTouchActive.value = false
-  }
-}
-
-// Touch zone handlers for better mobile control
-const handleTouchZoneStart = (e) => {
-  if (!isServing.value) {
-    e.preventDefault()
-    e.stopPropagation()
-    const touch = e.touches[0]
-    const rect = canvasWrapper.value.getBoundingClientRect()
-    touchStartY.value = touch.clientY - rect.top
-    isTouchActive.value = true
-  }
-}
-
-const handleTouchZoneMove = (e) => {
-  if (!isServing.value && isTouchActive.value) {
-    e.preventDefault()
-    e.stopPropagation()
-    const touch = e.touches[0]
-    const rect = canvasWrapper.value.getBoundingClientRect()
-    const relativeY = touch.clientY - rect.top
-    const canvasY = (relativeY / rect.height) * canvasHeight.value
-    playerPaddle.targetY = canvasY - playerPaddle.height / 2
-  }
-}
-
-const handleTouchZoneEnd = (e) => {
-  e.preventDefault()
-  e.stopPropagation()
-  isTouchActive.value = false
 }
 
 // Calculate serve target points
@@ -520,17 +346,6 @@ const drawCourt = () => {
   ctx.textAlign = 'center'
   ctx.fillText(playerScore.value, court.x + court.width / 4, 60)
   ctx.fillText(computerScore.value, court.x + 3 * court.width / 4, 60)
-  
-  // Draw serving indicator
-  if (!gameActive.value && !sideOutMessage.value) {
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)'
-    ctx.font = '14px Poppins'
-    if (isPlayerServe.value) {
-      ctx.fillText('YOUR SERVE', court.x + court.width / 4, 85)
-    } else {
-      ctx.fillText('CPU SERVE', court.x + 3 * court.width / 4, 85)
-    }
-  }
 }
 
 const drawPaddle = (paddle) => {
@@ -562,8 +377,8 @@ const draw = () => {
   // Draw ball
   drawBall()
   
-  // Draw serve instruction if serving (desktop only)
-  if (isServing.value && !gameActive.value && !isMobile.value) {
+  // Draw serve instruction if serving
+  if (isServing.value && !gameActive.value) {
     ctx.fillStyle = 'rgba(255, 255, 255, 0.7)'
     ctx.font = '16px Poppins'
     ctx.textAlign = 'center'
@@ -571,30 +386,6 @@ const draw = () => {
       ctx.fillText('Click to serve diagonally cross-court', canvasWidth.value / 2, canvasHeight.value - 30)
     }
   }
-  
-  // Draw side out message
-  if (sideOutMessage.value) {
-    ctx.fillStyle = 'rgba(255, 193, 7, 0.9)'
-    ctx.font = 'bold 36px Poppins'
-    ctx.textAlign = 'center'
-    ctx.shadowBlur = 20
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.5)'
-    ctx.fillText('SIDE OUT!', canvasWidth.value / 2, canvasHeight.value / 2)
-    ctx.font = '20px Poppins'
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)'
-    ctx.fillText(sideOutMessage.value.includes('Your') ? 'Your serve' : 'CPU serve', 
-                 canvasWidth.value / 2, canvasHeight.value / 2 + 40)
-    ctx.shadowBlur = 0
-  }
-}
-
-const showSideOut = (newServer) => {
-  sideOutMessage.value = newServer ? 'Side Out! Your serve' : 'Side Out! CPU serve'
-  draw() // Force redraw to show message
-  setTimeout(() => {
-    sideOutMessage.value = ''
-    setupServe()
-  }, 2000)
 }
 
 const setupServe = () => {
@@ -848,48 +639,45 @@ const update = (dt) => {
   playerPaddle.y = Math.max(court.y, Math.min(court.y + court.height - playerPaddle.height, playerPaddle.y))
   playerPaddle.targetY = Math.max(court.y, Math.min(court.y + court.height - playerPaddle.height, playerPaddle.targetY))
   
-  // Handle scoring - ONLY THE SERVING SIDE CAN SCORE
+  // Score points and handle serve changes
   if (ball.value.x < court.x - 50) {
-    // Ball went past player's side
+    // Computer scores
+    computerScore.value++
     gameActive.value = false
     
-    // Cancel animation frame before handling score
-    if (animationId) {
-      cancelAnimationFrame(animationId)
-      animationId = null
-    }
-    
-    if (!isPlayerServe.value) {
-      // Computer was serving and won the rally - SCORES
-      computerScore.value++
-      // Computer keeps serving after scoring
-      setTimeout(() => setupServe(), 1000)
-    } else {
-      // Player was serving and lost the rally - SIDE OUT
-      isPlayerServe.value = false // Change serve to computer
-      showSideOut(false) // Show side out message
-    }
-    
-  } else if (ball.value.x > court.x + court.width + 50) {
-    // Ball went past computer's side
-    gameActive.value = false
-    
-    // Cancel animation frame before handling score
-    if (animationId) {
-      cancelAnimationFrame(animationId)
-      animationId = null
-    }
-    
+    // In pickleball, serve changes when serving side loses
     if (isPlayerServe.value) {
-      // Player was serving and won the rally - SCORES
-      playerScore.value++
-      // Player keeps serving after scoring
-      setTimeout(() => setupServe(), 1000)
-    } else {
-      // Computer was serving and lost the rally - SIDE OUT
-      isPlayerServe.value = true // Change serve to player
-      showSideOut(true) // Show side out message
+      // Player was serving and lost, change serve
+      isPlayerServe.value = false
     }
+    // If computer was serving and scored, they keep serving
+    
+    // Cancel animation frame before setting up new serve
+    if (animationId) {
+      cancelAnimationFrame(animationId)
+      animationId = null
+    }
+    
+    setTimeout(() => setupServe(), 1000)
+  } else if (ball.value.x > court.x + court.width + 50) {
+    // Player scores
+    playerScore.value++
+    gameActive.value = false
+    
+    // In pickleball, serve changes when serving side loses
+    if (!isPlayerServe.value) {
+      // Computer was serving and lost, change serve
+      isPlayerServe.value = true
+    }
+    // If player was serving and scored, they keep serving
+    
+    // Cancel animation frame before setting up new serve
+    if (animationId) {
+      cancelAnimationFrame(animationId)
+      animationId = null
+    }
+    
+    setTimeout(() => setupServe(), 1000)
   }
   
   // Check for game win (11 points, win by 2)
@@ -924,11 +712,22 @@ const gameLoop = (currentTime) => {
 }
 
 const handleMouseMove = (e) => {
-  if (!isServing.value && !isMobile.value) { // Only allow paddle movement during play on desktop
+  if (!isServing.value) { // Only allow paddle movement during play
     const rect = gameCanvas.value.getBoundingClientRect()
     const scaleY = canvasHeight.value / rect.height
     const mouseY = (e.clientY - rect.top) * scaleY
     playerPaddle.targetY = mouseY - playerPaddle.height / 2
+  }
+}
+
+const handleTouchMove = (e) => {
+  if (!isServing.value) { // Only allow paddle movement during play
+    e.preventDefault()
+    const rect = gameCanvas.value.getBoundingClientRect()
+    const touch = e.touches[0]
+    const scaleY = canvasHeight.value / rect.height
+    const touchY = (touch.clientY - rect.top) * scaleY
+    playerPaddle.targetY = touchY - playerPaddle.height / 2
   }
 }
 
@@ -975,7 +774,6 @@ const resetGame = () => {
   isServing.value = true
   isFirstReturn.value = false
   serverJustServed.value = false
-  sideOutMessage.value = ''
   
   // Reset ball position
   ball.value.x = -100 // Start off-screen
@@ -1039,259 +837,196 @@ const toggleFullscreen = () => {
 onMounted(() => {
   ctx = gameCanvas.value.getContext('2d')
   loadGameSettings()
-  detectMobile()
-  checkOrientation()
-  
   // Initialize ball position off-screen
   ball.value.x = -100
   ball.value.y = -100
   draw()
-  
-  // Add event listeners for orientation change
-  window.addEventListener('resize', checkOrientation)
-  window.addEventListener('orientationchange', checkOrientation)
 })
 
 onUnmounted(() => {
   if (animationId) {
     cancelAnimationFrame(animationId)
   }
-  window.removeEventListener('resize', checkOrientation)
-  window.removeEventListener('orientationchange', checkOrientation)
 })
 </script>
 
 <style scoped>
-/* Import existing styles */
-@import './GameCanvas.css';
-
-/* Mobile-specific styles */
-.mobile-controls {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
+.game-container {
+  background: rgba(26, 26, 46, 0.05);
+  border-radius: var(--radius-lg);
+  padding: 15px;
+  box-shadow: var(--shadow-lg);
   height: 100%;
-  pointer-events: none;
-  z-index: 10;
+  display: flex;
+  flex-direction: column;
 }
 
-.touch-zone {
-  position: absolute;
-  top: 0;
-  height: 100%;
-  pointer-events: auto;
-  user-select: none;
-  -webkit-user-select: none;
+.game-controls-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  padding: 10px 20px;
+  background: white;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
 }
 
-.touch-zone.left {
-  left: 0;
-  width: 50%;
-  background: linear-gradient(to right, rgba(0, 200, 83, 0.05), transparent);
-}
-
-.touch-zone.right {
-  right: 0;
-  width: 50%;
-  background: linear-gradient(to left, rgba(255, 107, 53, 0.05), transparent);
+.score-board {
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 30px;
 }
 
-.touch-hint {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 14px;
-  text-align: center;
-  pointer-events: none;
-  animation: fadeInOut 3s ease-in-out infinite;
-}
-
-.touch-hint i {
-  display: block;
-  font-size: 24px;
-  margin-bottom: 8px;
-}
-
-@keyframes fadeInOut {
-  0%, 100% { opacity: 0.3; }
-  50% { opacity: 0.7; }
-}
-
-.mobile-serve-btn {
-  background: linear-gradient(135deg, #ffc107, #ff9800);
-  color: white;
-  border: none;
-  border-radius: 50px;
-  padding: 20px 30px;
-  font-size: 18px;
-  font-weight: bold;
+.score-item {
   display: flex;
   flex-direction: column;
   align-items: center;
+}
+
+.score-label {
+  font-size: 0.75rem;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.score-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--primary-color);
+  line-height: 1;
+}
+
+.timer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: #f0f0f0;
+  border-radius: 20px;
+  font-weight: 600;
+  color: #666;
+}
+
+.game-info {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.serve-indicator {
+  padding: 8px 16px;
+  background: var(--gradient-secondary);
+  color: white;
+  border-radius: 20px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.serve-position {
+  font-size: 0.85rem;
+  color: #666;
+  font-weight: 500;
+}
+
+.game-controls {
+  display: flex;
   gap: 10px;
-  cursor: pointer;
-  box-shadow: 0 4px 20px rgba(255, 193, 7, 0.4);
-  transition: all 0.3s ease;
-  animation: pulse 2s ease-in-out infinite;
 }
 
-.mobile-serve-btn:active {
-  transform: scale(0.95);
-  box-shadow: 0 2px 10px rgba(255, 193, 7, 0.4);
-}
-
-.mobile-serve-btn i {
-  font-size: 24px;
-}
-
-@keyframes pulse {
-  0%, 100% {
-    transform: scale(1);
-    box-shadow: 0 4px 20px rgba(255, 193, 7, 0.4);
-  }
-  50% {
-    transform: scale(1.05);
-    box-shadow: 0 6px 30px rgba(255, 193, 7, 0.6);
-  }
-}
-
-.mobile-game-buttons {
-  position: absolute;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 15px;
-  pointer-events: auto;
-}
-
-.mobile-control-btn {
-  width: 50px;
-  height: 50px;
+.control-btn {
+  width: 40px;
+  height: 40px;
+  border: none;
   border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  background: rgba(0, 0, 0, 0.5);
-  color: white;
-  font-size: 18px;
+  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
   transition: all 0.3s ease;
-  backdrop-filter: blur(10px);
+  font-size: 1rem;
+  color: white;
 }
 
-.mobile-control-btn:active {
-  transform: scale(0.9);
-  background: rgba(0, 0, 0, 0.7);
+.control-btn.play {
+  background: var(--gradient-primary);
 }
 
-.mobile-control-btn.start {
-  background: rgba(0, 200, 83, 0.3);
-  border-color: #00c853;
+.control-btn.pause {
+  background: linear-gradient(135deg, #ffa500, #ff8c00);
 }
 
-.mobile-control-btn.pause {
-  background: rgba(255, 193, 7, 0.3);
-  border-color: #ffc107;
+.control-btn.reset {
+  background: linear-gradient(135deg, #6c757d, #495057);
 }
 
-.mobile-control-btn.reset {
-  background: rgba(255, 107, 53, 0.3);
-  border-color: #ff6b35;
+.control-btn.fullscreen {
+  background: linear-gradient(135deg, #007bff, #0056b3);
 }
 
-.orientation-hint {
-  position: fixed;
-  top: 0;
-  left: 0;
+.control-btn:hover {
+  transform: scale(1.1);
+  box-shadow: var(--shadow-md);
+}
+
+.canvas-wrapper {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0a0a0a;
+  border-radius: var(--radius-md);
+  padding: 10px;
+  position: relative;
+  overflow: hidden;
+}
+
+canvas {
+  border-radius: var(--radius-md);
   width: 100%;
   height: 100%;
-  background: rgba(10, 61, 12, 0.95);
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  cursor: none;
+}
+
+.canvas-wrapper:fullscreen {
+  background: #000;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: white;
-  z-index: 1000;
-  font-size: 18px;
-  text-align: center;
-  padding: 20px;
 }
 
-.orientation-hint i {
-  font-size: 48px;
-  margin-bottom: 20px;
-  animation: rotate 2s ease-in-out infinite;
+.canvas-wrapper:fullscreen canvas {
+  max-width: 90vw;
+  max-height: 90vh;
 }
 
-@keyframes rotate {
-  0%, 100% { transform: rotate(-90deg); }
-  50% { transform: rotate(0deg); }
-}
-
-/* Responsive adjustments */
 @media (max-width: 768px) {
   .game-controls-bar {
     flex-direction: column;
-    gap: 10px;
-    padding: 10px;
+    gap: 15px;
   }
   
   .score-board {
-    font-size: 14px;
+    width: 100%;
+    justify-content: space-around;
   }
   
-  .game-controls {
-    display: none; /* Hide desktop controls on mobile */
+  .control-btn {
+    width: 35px;
+    height: 35px;
+    font-size: 0.9rem;
   }
   
-  .canvas-wrapper {
-    margin-top: 10px;
-  }
-}
-
-@media (max-height: 600px) and (orientation: landscape) {
-  .game-controls-bar {
-    position: absolute;
-    top: 0;
-    background: rgba(0, 0, 0, 0.8);
-    z-index: 5;
-  }
-  
-  .mobile-game-buttons {
-    bottom: 10px;
-  }
-  
-  .mobile-control-btn {
-    width: 40px;
-    height: 40px;
-    font-size: 16px;
-  }
-}
-
-/* Side out indicator animation */
-.side-out-indicator {
-  font-size: 18px;
-  font-weight: bold;
-  color: #ffc107;
-  animation: slideIn 0.5s ease-out;
-}
-
-@keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateY(-20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+  .serve-indicator {
+    font-size: 0.9rem;
+    padding: 6px 12px;
   }
 }
 </style>
