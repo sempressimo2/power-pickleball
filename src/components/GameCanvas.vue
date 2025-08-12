@@ -238,6 +238,7 @@ const loadGameSettings = () => {
     // Default settings
     gameSettings = {
       court: {
+        backgroundColor: '#0a3d0c',
         baseColor: '#1e7e34',
         lineColor: '#ffffff',
         kitchenColor: 'rgba(255, 193, 7, 0.2)',
@@ -253,9 +254,13 @@ const loadGameSettings = () => {
 const drawCourt = () => {
   const theme = gameSettings?.court || {}
   
+  // Draw background (outside court area) with theme color
+  ctx.fillStyle = theme.backgroundColor || '#0a3d0c'
+  ctx.fillRect(0, 0, canvasWidth.value, canvasHeight.value)
+  
   // Draw base court
   ctx.fillStyle = theme.baseColor || '#1e7e34'
-  ctx.fillRect(0, 0, canvasWidth.value, canvasHeight.value)
+  ctx.fillRect(court.x, court.y, court.width, court.height)
   
   // Draw outer court boundaries
   ctx.strokeStyle = theme.lineColor || '#ffffff'
@@ -335,23 +340,12 @@ const drawCourt = () => {
   ctx.fillRect(netX - 3, court.y - 25, 6, 20)
   ctx.fillRect(netX - 3, court.y + court.height + 5, 6, 20)
   
-  // Add court labels
-  ctx.fillStyle = theme.lineColor || '#ffffff'
-  ctx.font = '12px Poppins'
-  ctx.globalAlpha = 0.5
+  // Draw scores on court
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.3)'
+  ctx.font = 'bold 48px Poppins'
   ctx.textAlign = 'center'
-  
-  // Kitchen labels
-  ctx.fillText('KITCHEN', netX - court.kitchenWidth / 2, court.y + court.height / 2)
-  ctx.fillText('KITCHEN', netX + court.kitchenWidth / 2, court.y + court.height / 2)
-  
-  // Service area labels
-  ctx.fillText('LEFT SERVICE', court.x + (netX - court.kitchenWidth - court.x) / 2, court.y + court.height / 4)
-  ctx.fillText('RIGHT SERVICE', court.x + (netX - court.kitchenWidth - court.x) / 2, court.y + 3 * court.height / 4)
-  ctx.fillText('LEFT SERVICE', netX + court.kitchenWidth + (court.x + court.width - netX - court.kitchenWidth) / 2, court.y + court.height / 4)
-  ctx.fillText('RIGHT SERVICE', netX + court.kitchenWidth + (court.x + court.width - netX - court.kitchenWidth) / 2, court.y + 3 * court.height / 4)
-  
-  ctx.globalAlpha = 1
+  ctx.fillText(playerScore.value, court.x + court.width / 4, 60)
+  ctx.fillText(computerScore.value, court.x + 3 * court.width / 4, 60)
 }
 
 const drawPaddle = (paddle) => {
@@ -382,13 +376,6 @@ const draw = () => {
   
   // Draw ball
   drawBall()
-  
-  // Draw scores on court
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.3)'
-  ctx.font = 'bold 48px Poppins'
-  ctx.textAlign = 'center'
-  ctx.fillText(playerScore.value, court.x + court.width / 4, 60)
-  ctx.fillText(computerScore.value, court.x + 3 * court.width / 4, 60)
   
   // Draw serve instruction if serving
   if (isServing.value && !gameActive.value) {

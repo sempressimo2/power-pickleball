@@ -112,6 +112,7 @@ const courts = [
     name: 'Stars & Stripes',
     description: 'Patriotic red, white & blue',
     preview: 'linear-gradient(90deg, #B22234, #fff, #3C3B6E)',
+    backgroundColor: '#0d1b2a',  // Dark navy background
     baseColor: '#1a2a4a',
     lineColor: '#ffffff',
     kitchenColor: 'rgba(178, 34, 52, 0.3)',
@@ -124,6 +125,7 @@ const courts = [
     name: 'Classic Green',
     description: 'Traditional tennis court',
     preview: 'linear-gradient(135deg, #1e7e34, #28a745)',
+    backgroundColor: '#0a3d0c',  // Dark forest green background
     baseColor: '#1e7e34',
     lineColor: '#ffffff',
     kitchenColor: 'rgba(255, 193, 7, 0.2)',
@@ -136,6 +138,7 @@ const courts = [
     name: 'Cyber Court',
     description: 'Neon lights & cyber vibes',
     preview: 'linear-gradient(135deg, #00ffff, #ff00ff, #00ff00)',
+    backgroundColor: '#000000',  // Pure black for cyber theme
     baseColor: '#0a0a0a',
     lineColor: '#00ffff',
     kitchenColor: 'rgba(255, 0, 255, 0.2)',
@@ -148,6 +151,7 @@ const courts = [
     name: 'Night Mode',
     description: 'Sleek dark theme',
     preview: 'linear-gradient(135deg, #1a1a1a, #2d2d2d)',
+    backgroundColor: '#000000',  // Black background
     baseColor: '#0d0d0d',
     lineColor: '#666666',
     kitchenColor: 'rgba(255, 107, 53, 0.15)',
