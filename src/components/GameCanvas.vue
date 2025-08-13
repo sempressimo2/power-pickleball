@@ -1,72 +1,115 @@
 <template>
-  <div class="game-container">
-    <div class="game-controls-bar">
-      <div class="score-board">
-        <div class="score-item">
-          <span class="score-label">You</span>
-          <span class="score-value">{{ playerScore }}</span>
-        </div>
-        <div class="timer">
-          <i class="fas fa-clock"></i> {{ gameTime }}
-        </div>
-        <div class="score-item">
-          <span class="score-label">CPU</span>
-          <span class="score-value">{{ computerScore }}</span>
-        </div>
-      </div>
-      
-      <div class="game-info">
-        <span class="serve-indicator" v-if="!gameActive && !gameStarted">
-          <i class="fas fa-table-tennis"></i> {{ isPlayerServe ? 'Your Serve' : 'CPU Serve' }}
-        </span>
-        <span class="serve-position" v-if="isServing">
-          Serving from: {{ getServePosition() }}
-        </span>
-      </div>
-      
-      <div class="game-controls">
-        <button @click="startGame" class="control-btn play" v-if="!gameActive" :title="gameStarted ? 'Resume' : 'Start'">
-          <i class="fas fa-play"></i>
-        </button>
-        <button @click="pauseGame" class="control-btn pause" v-else title="Pause">
-          <i class="fas fa-pause"></i>
-        </button>
-        <button @click="resetGame" class="control-btn reset" title="Reset">
-          <i class="fas fa-redo"></i>
-        </button>
-        <button @click="toggleFullscreen" class="control-btn fullscreen" title="Fullscreen">
-          <i class="fas fa-expand"></i>
-        </button>
-      </div>
+  <div class="game-container" ref="gameContainer">
+    <!-- Minimal floating UI -->
+    <div class="floating-ui" v-if="!isFullscreen">
+      <button @click="enterFullscreen" class="fullscreen-prompt" v-if="isMobile && !gameStarted">
+        <i class="fas fa-expand"></i>
+        <span>Tap for fullscreen</span>
+      </button>
     </div>
     
+    <!-- Main Canvas -->
     <div class="canvas-wrapper" ref="canvasWrapper">
       <canvas
         ref="gameCanvas"
         :width="canvasWidth"
         :height="canvasHeight"
         @mousemove="handleMouseMove"
+        @touchstart="handleTouchStart"
         @touchmove="handleTouchMove"
-        @click="handleServe"
+        @touchend="handleTouchEnd"
+        @click="handleCanvasClick"
       ></canvas>
+      
+      <!-- Minimal Overlay UI -->
+      <div class="game-overlay">
+        <!-- Serve instruction for mobile -->
+        <div v-if="isServing && !gameActive" class="serve-instruction">
+          <i class="fas fa-hand-pointer"></i>
+          {{ isMobile ? 'Tap to serve' : 'Click to serve' }}
+        </div>
+        
+        <!-- Winner overlay -->
+        <div v-if="showWinner" class="winner-overlay">
+          <h2>{{ winner }}</h2>
+          <p>{{ playerScore }} - {{ computerScore }}</p>
+          <button @click="resetGame" class="btn-replay">
+            <i class="fas fa-redo"></i> Play Again
+          </button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Floating Action Button (FAB) -->
+    <div class="fab-container" v-if="gameStarted">
+      <button @click="toggleMenu" class="fab" :class="{ active: menuOpen }">
+        <i class="fas" :class="menuOpen ? 'fa-times' : (gameActive ? 'fa-pause' : 'fa-play')"></i>
+      </button>
+      
+      <!-- FAB Menu -->
+      <transition name="scale">
+        <div v-if="menuOpen" class="fab-menu">
+          <button @click="toggleGame" class="fab-menu-item">
+            <i class="fas" :class="gameActive ? 'fa-pause' : 'fa-play'"></i>
+            <span>{{ gameActive ? 'Pause' : 'Resume' }}</span>
+          </button>
+          <button @click="resetGame" class="fab-menu-item">
+            <i class="fas fa-redo"></i>
+            <span>Reset</span>
+          </button>
+          <button @click="toggleFullscreen" class="fab-menu-item" v-if="!isMobile">
+            <i class="fas fa-expand"></i>
+            <span>Fullscreen</span>
+          </button>
+          <button @click="exitGame" class="fab-menu-item">
+            <i class="fas fa-home"></i>
+            <span>Exit</span>
+          </button>
+        </div>
+      </transition>
+    </div>
+    
+    <!-- Start button for desktop/first time -->
+    <div v-if="!gameStarted && !isMobile" class="start-overlay">
+      <button @click="startGame" class="btn-start">
+        <i class="fas fa-play"></i> Start Game
+      </button>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
 
+const router = useRouter()
+const gameContainer = ref(null)
 const gameCanvas = ref(null)
 const canvasWrapper = ref(null)
+
+// Responsive canvas dimensions
 const canvasWidth = ref(1200)
 const canvasHeight = ref(600)
+
+// Game state
 const playerScore = ref(0)
 const computerScore = ref(0)
 const gameActive = ref(false)
 const gameStarted = ref(false)
-const gameTime = ref('00:00')
+const gameTime = ref(0)
 const isPlayerServe = ref(true)
 const isServing = ref(true)
+const showWinner = ref(false)
+const winner = ref('')
+
+// UI state
+const menuOpen = ref(false)
+const isFullscreen = ref(false)
+const isMobile = ref(false)
+
+// Touch control state
+const touchStartY = ref(0)
+const touchActive = ref(false)
 
 let ctx = null
 let animationId = null
@@ -77,30 +120,29 @@ let gameSettings = null
 // Frame rate regulation
 let lastFrameTime = 0
 const targetFPS = 60
-const frameInterval = 1000 / targetFPS // Target 60 FPS
+const frameInterval = 1000 / targetFPS
 let deltaTime = 0
 
 // Rally tracking
-let isFirstReturn = ref(false) // Track if waiting for first return after serve
-let serverJustServed = ref(false) // Track if server just served and needs to move in
+let isFirstReturn = ref(false)
+let serverJustServed = ref(false)
 
-// Physics constants (per second, will be scaled by deltaTime)
-const BALL_BASE_SPEED = 480 // pixels per second
-const COMPUTER_BASE_SPEED = 270 // pixels per second
-const BALL_ACCELERATION = 1.05 // 5% speed increase per hit
-const PADDLE_MOVE_SPEED = 180 // Speed for moving paddles into court after serve
+// Physics constants
+const BALL_BASE_SPEED = 480
+const COMPUTER_BASE_SPEED = 270
+const BALL_ACCELERATION = 1.05
+const PADDLE_MOVE_SPEED = 180
 
-// Court dimensions (properly scaled)
+// Court dimensions
 const court = {
-  width: 880,  // 44 feet scaled
-  height: 400, // 20 feet scaled
+  width: 880,
+  height: 400,
   x: 160,
   y: 100,
-  kitchenWidth: 140, // 7 feet from net on each side
+  kitchenWidth: 140,
   lineWidth: 3
 }
 
-// Calculate net position (center of court)
 const netX = court.x + court.width / 2
 
 // Game objects
@@ -108,8 +150,8 @@ const ball = ref({
   x: 0,
   y: 0,
   radius: 10,
-  speedX: 0, // pixels per second
-  speedY: 0, // pixels per second
+  speedX: 0,
+  speedY: 0,
   color: '#ffd23f'
 })
 
@@ -117,116 +159,150 @@ const playerPaddle = {
   x: 100,
   y: 250,
   width: 15,
-  height: 75, // Reduced from 100 to 75 (75% size)
+  height: 75,
   color: '#00c853',
-  targetY: 250, // For smooth mouse tracking
-  targetX: 100, // For horizontal movement
-  isMovingIn: false // Track if paddle is moving into court
+  targetY: 250,
+  targetX: 100,
+  isMovingIn: false
 }
 
 const computerPaddle = {
   x: 1085,
   y: 250,
   width: 15,
-  height: 75, // Reduced from 100 to 75 (75% size)
+  height: 75,
   color: '#ff6b35',
-  targetX: 1085, // For horizontal movement
-  isMovingIn: false // Track if paddle is moving into court
+  targetX: 1085,
+  isMovingIn: false
 }
 
-// Get serve position text
-const getServePosition = () => {
-  if (isPlayerServe.value) {
-    return playerScore.value % 2 === 0 ? 'Right Court' : 'Left Court'
-  } else {
-    return computerScore.value % 2 === 0 ? 'Right Court' : 'Left Court'
+// Check if mobile device
+const checkMobile = () => {
+  isMobile.value = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
+    || (window.innerWidth <= 768)
+}
+
+// Resize canvas for mobile
+const resizeCanvas = () => {
+  if (!canvasWrapper.value) return
+  
+  const wrapper = canvasWrapper.value
+  const containerWidth = wrapper.clientWidth
+  const containerHeight = wrapper.clientHeight
+  
+  // Maintain aspect ratio
+  const aspectRatio = 2 // 1200/600
+  let newWidth = containerWidth
+  let newHeight = containerWidth / aspectRatio
+  
+  if (newHeight > containerHeight) {
+    newHeight = containerHeight
+    newWidth = containerHeight * aspectRatio
+  }
+  
+  // Update canvas display size (CSS)
+  if (gameCanvas.value) {
+    gameCanvas.value.style.width = `${newWidth}px`
+    gameCanvas.value.style.height = `${newHeight}px`
   }
 }
 
-// Calculate serve target points
-const getServeTargets = (isPlayerServing, serveFromRight) => {
-  let targetArea = {}
-  
-  if (isPlayerServing) {
-    // Player serving to computer's side (right side of net)
-    if (serveFromRight) {
-      // Serve to computer's left service area (diagonal)
-      targetArea = {
-        x1: netX + court.kitchenWidth,
-        x2: court.x + court.width - 20,  // Leave margin from baseline
-        y1: court.y + 20,  // Leave margin from sideline
-        y2: court.y + court.height / 2 - 20
-      }
-    } else {
-      // Serve to computer's right service area (diagonal)
-      targetArea = {
-        x1: netX + court.kitchenWidth,
-        x2: court.x + court.width - 20,
-        y1: court.y + court.height / 2 + 20,
-        y2: court.y + court.height - 20
-      }
-    }
-  } else {
-    // Computer serving to player's side (left side of net)
-    if (serveFromRight) {
-      // Serve to player's left service area (diagonal)
-      targetArea = {
-        x1: court.x + 20,
-        x2: netX - court.kitchenWidth,
-        y1: court.y + 20,
-        y2: court.y + court.height / 2 - 20
-      }
-    } else {
-      // Serve to player's right service area (diagonal)
-      targetArea = {
-        x1: court.x + 20,
-        x2: netX - court.kitchenWidth,
-        y1: court.y + court.height / 2 + 20,
-        y2: court.y + court.height - 20
-      }
-    }
+// Touch controls
+const handleTouchStart = (e) => {
+  e.preventDefault()
+  if (!gameStarted.value && isMobile.value) {
+    startGame()
+    return
   }
   
-  // Calculate the 3 target points
-  const targets = [
-    // Middle of service court
-    {
-      x: (targetArea.x1 + targetArea.x2) / 2,
-      y: (targetArea.y1 + targetArea.y2) / 2
-    },
-    // Top corner of service court
-    {
-      x: isPlayerServing ? targetArea.x2 : targetArea.x1,
-      y: targetArea.y1
-    },
-    // Bottom corner of service court
-    {
-      x: isPlayerServing ? targetArea.x2 : targetArea.x1,
-      y: targetArea.y2
+  const touch = e.touches[0]
+  const rect = gameCanvas.value.getBoundingClientRect()
+  touchStartY.value = (touch.clientY - rect.top) * (canvasHeight.value / rect.height)
+  touchActive.value = true
+  
+  // Handle serve on tap
+  if (isServing.value && isPlayerServe.value && !gameActive.value) {
+    handleServe()
+  }
+}
+
+const handleTouchMove = (e) => {
+  e.preventDefault()
+  if (!touchActive.value || isServing.value) return
+  
+  const touch = e.touches[0]
+  const rect = gameCanvas.value.getBoundingClientRect()
+  const touchY = (touch.clientY - rect.top) * (canvasHeight.value / rect.height)
+  playerPaddle.targetY = touchY - playerPaddle.height / 2
+}
+
+const handleTouchEnd = (e) => {
+  e.preventDefault()
+  touchActive.value = false
+}
+
+const handleMouseMove = (e) => {
+  if (isMobile.value || isServing.value) return
+  
+  const rect = gameCanvas.value.getBoundingClientRect()
+  const scaleY = canvasHeight.value / rect.height
+  const mouseY = (e.clientY - rect.top) * scaleY
+  playerPaddle.targetY = mouseY - playerPaddle.height / 2
+}
+
+const handleCanvasClick = () => {
+  if (isServing.value && isPlayerServe.value && !gameActive.value && !isMobile.value) {
+    handleServe()
+  }
+}
+
+// Fullscreen handling
+const enterFullscreen = async () => {
+  try {
+    if (gameContainer.value.requestFullscreen) {
+      await gameContainer.value.requestFullscreen()
+    } else if (gameContainer.value.webkitRequestFullscreen) {
+      await gameContainer.value.webkitRequestFullscreen()
+    } else if (gameContainer.value.msRequestFullscreen) {
+      await gameContainer.value.msRequestFullscreen()
     }
-  ]
-  
-  return targets
+    isFullscreen.value = true
+    if (!gameStarted.value) {
+      startGame()
+    }
+  } catch (err) {
+    console.error('Fullscreen failed:', err)
+  }
 }
 
-// Calculate velocity needed to reach target (in pixels per second)
-const calculateServeVelocity = (startX, startY, targetX, targetY, isPlayerServing) => {
-  const speed = gameSettings?.difficulty?.speed || 1
-  const baseSpeed = BALL_BASE_SPEED * speed
-  
-  // Calculate distance
-  const dx = targetX - startX
-  const dy = targetY - startY
-  const distance = Math.sqrt(dx * dx + dy * dy)
-  
-  // Normalize and apply speed (in pixels per second)
-  const speedX = (dx / distance) * baseSpeed
-  const speedY = (dy / distance) * baseSpeed * 0.5  // Reduce Y speed for more realistic trajectory
-  
-  return { speedX, speedY }
+const toggleFullscreen = () => {
+  if (!document.fullscreenElement) {
+    enterFullscreen()
+  } else {
+    document.exitFullscreen()
+    isFullscreen.value = false
+  }
 }
 
-// Get game settings from sessionStorage
+// Menu handling
+const toggleMenu = () => {
+  menuOpen.value = !menuOpen.value
+}
+
+const toggleGame = () => {
+  if (gameActive.value) {
+    pauseGame()
+  } else {
+    resumeGame()
+  }
+  menuOpen.value = false
+}
+
+const exitGame = () => {
+  router.push('/')
+}
+
+// Get game settings
 const loadGameSettings = () => {
   const settings = sessionStorage.getItem('gameSettings')
   if (settings) {
@@ -235,7 +311,6 @@ const loadGameSettings = () => {
       ball.value.color = gameSettings.court.ballColor
     }
   } else {
-    // Default settings
     gameSettings = {
       court: {
         backgroundColor: '#0a3d0c',
@@ -251,10 +326,11 @@ const loadGameSettings = () => {
   }
 }
 
+// Enhanced draw function with on-canvas scores
 const drawCourt = () => {
   const theme = gameSettings?.court || {}
   
-  // Draw background (outside court area) with theme color
+  // Draw background
   ctx.fillStyle = theme.backgroundColor || '#0a3d0c'
   ctx.fillRect(0, 0, canvasWidth.value, canvasHeight.value)
   
@@ -262,70 +338,58 @@ const drawCourt = () => {
   ctx.fillStyle = theme.baseColor || '#1e7e34'
   ctx.fillRect(court.x, court.y, court.width, court.height)
   
-  // Draw outer court boundaries
+  // Draw court lines
   ctx.strokeStyle = theme.lineColor || '#ffffff'
   ctx.lineWidth = court.lineWidth
   ctx.strokeRect(court.x, court.y, court.width, court.height)
   
-  // Draw kitchen (non-volley zone) - NEXT TO THE NET
+  // Draw kitchen zones
   ctx.fillStyle = theme.kitchenColor || 'rgba(255, 193, 7, 0.2)'
-  // Left kitchen (7 feet from net)
   ctx.fillRect(netX - court.kitchenWidth, court.y, court.kitchenWidth, court.height)
-  // Right kitchen (7 feet from net)
   ctx.fillRect(netX, court.y, court.kitchenWidth, court.height)
   
   // Draw kitchen lines
   ctx.strokeStyle = theme.lineColor || '#ffffff'
   ctx.lineWidth = court.lineWidth
   ctx.beginPath()
-  // Left kitchen line
   ctx.moveTo(netX - court.kitchenWidth, court.y)
   ctx.lineTo(netX - court.kitchenWidth, court.y + court.height)
-  // Right kitchen line
   ctx.moveTo(netX + court.kitchenWidth, court.y)
   ctx.lineTo(netX + court.kitchenWidth, court.y + court.height)
   ctx.stroke()
   
-  // Draw baseline centerlines (divides left and right service areas)
+  // Draw centerlines
   ctx.beginPath()
-  // Left side centerline (from baseline to kitchen)
   ctx.moveTo(court.x, court.y + court.height / 2)
   ctx.lineTo(netX - court.kitchenWidth, court.y + court.height / 2)
-  // Right side centerline (from baseline to kitchen)
   ctx.moveTo(netX + court.kitchenWidth, court.y + court.height / 2)
   ctx.lineTo(court.x + court.width, court.y + court.height / 2)
   ctx.stroke()
   
-  // Highlight target service area during serve
+  // Highlight service area during serve
   if (isServing.value) {
     ctx.fillStyle = 'rgba(255, 255, 0, 0.1)'
     if (isPlayerServe.value) {
-      // Player serving - highlight target area on computer's side
       const serveFromRight = playerScore.value % 2 === 0
       if (serveFromRight) {
-        // Serve to computer's left service area (diagonal)
         ctx.fillRect(netX + court.kitchenWidth, court.y, 
                     (court.x + court.width) - (netX + court.kitchenWidth), court.height / 2)
       } else {
-        // Serve to computer's right service area (diagonal)
         ctx.fillRect(netX + court.kitchenWidth, court.y + court.height / 2, 
                     (court.x + court.width) - (netX + court.kitchenWidth), court.height / 2)
       }
     } else {
-      // Computer serving - highlight target area on player's side
       const serveFromRight = computerScore.value % 2 === 0
       if (serveFromRight) {
-        // Serve to player's left service area (diagonal)
         ctx.fillRect(court.x, court.y, netX - court.kitchenWidth - court.x, court.height / 2)
       } else {
-        // Serve to player's right service area (diagonal)
         ctx.fillRect(court.x, court.y + court.height / 2, 
                     netX - court.kitchenWidth - court.x, court.height / 2)
       }
     }
   }
   
-  // Draw net (center line)
+  // Draw net
   ctx.strokeStyle = theme.netColor || '#ffffff'
   ctx.lineWidth = 4
   ctx.setLineDash([10, 10])
@@ -340,12 +404,40 @@ const drawCourt = () => {
   ctx.fillRect(netX - 3, court.y - 25, 6, 20)
   ctx.fillRect(netX - 3, court.y + court.height + 5, 6, 20)
   
-  // Draw scores on court
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.3)'
-  ctx.font = 'bold 48px Poppins'
+  // Draw scores on canvas (mobile-friendly large scores)
+  ctx.save()
+  ctx.font = isMobile.value ? 'bold 60px sans-serif' : 'bold 48px sans-serif'
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.9)'
   ctx.textAlign = 'center'
-  ctx.fillText(playerScore.value, court.x + court.width / 4, 60)
-  ctx.fillText(computerScore.value, court.x + 3 * court.width / 4, 60)
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.5)'
+  ctx.shadowBlur = 10
+  
+  // Player score (left)
+  ctx.fillText(playerScore.value.toString(), court.x + court.width / 4, 70)
+  // Computer score (right)
+  ctx.fillText(computerScore.value.toString(), court.x + 3 * court.width / 4, 70)
+  
+  // Score labels
+  ctx.font = isMobile.value ? '14px sans-serif' : '12px sans-serif'
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.7)'
+  ctx.fillText('YOU', court.x + court.width / 4, 90)
+  ctx.fillText('CPU', court.x + 3 * court.width / 4, 90)
+  
+  ctx.restore()
+  
+  // Draw timer if game is active
+  if (gameStarted.value && gameTime.value > 0) {
+    const minutes = Math.floor(gameTime.value / 60)
+    const seconds = gameTime.value % 60
+    const timeString = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+    
+    ctx.save()
+    ctx.font = '16px sans-serif'
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)'
+    ctx.textAlign = 'center'
+    ctx.fillText(timeString, canvasWidth.value / 2, 30)
+    ctx.restore()
+  }
 }
 
 const drawPaddle = (paddle) => {
@@ -367,25 +459,80 @@ const drawBall = () => {
 }
 
 const draw = () => {
-  // Draw court with theme
   drawCourt()
-  
-  // Draw paddles
   drawPaddle(playerPaddle)
   drawPaddle(computerPaddle)
-  
-  // Draw ball
   drawBall()
+}
+
+// Serve functions
+const getServeTargets = (isPlayerServing, serveFromRight) => {
+  let targetArea = {}
   
-  // Draw serve instruction if serving
-  if (isServing.value && !gameActive.value) {
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)'
-    ctx.font = '16px Poppins'
-    ctx.textAlign = 'center'
-    if (isPlayerServe.value) {
-      ctx.fillText('Click to serve diagonally cross-court', canvasWidth.value / 2, canvasHeight.value - 30)
+  if (isPlayerServing) {
+    if (serveFromRight) {
+      targetArea = {
+        x1: netX + court.kitchenWidth,
+        x2: court.x + court.width - 20,
+        y1: court.y + 20,
+        y2: court.y + court.height / 2 - 20
+      }
+    } else {
+      targetArea = {
+        x1: netX + court.kitchenWidth,
+        x2: court.x + court.width - 20,
+        y1: court.y + court.height / 2 + 20,
+        y2: court.y + court.height - 20
+      }
+    }
+  } else {
+    if (serveFromRight) {
+      targetArea = {
+        x1: court.x + 20,
+        x2: netX - court.kitchenWidth,
+        y1: court.y + 20,
+        y2: court.y + court.height / 2 - 20
+      }
+    } else {
+      targetArea = {
+        x1: court.x + 20,
+        x2: netX - court.kitchenWidth,
+        y1: court.y + court.height / 2 + 20,
+        y2: court.y + court.height - 20
+      }
     }
   }
+  
+  const targets = [
+    {
+      x: (targetArea.x1 + targetArea.x2) / 2,
+      y: (targetArea.y1 + targetArea.y2) / 2
+    },
+    {
+      x: isPlayerServing ? targetArea.x2 : targetArea.x1,
+      y: targetArea.y1
+    },
+    {
+      x: isPlayerServing ? targetArea.x2 : targetArea.x1,
+      y: targetArea.y2
+    }
+  ]
+  
+  return targets
+}
+
+const calculateServeVelocity = (startX, startY, targetX, targetY, isPlayerServing) => {
+  const speed = gameSettings?.difficulty?.speed || 1
+  const baseSpeed = BALL_BASE_SPEED * speed
+  
+  const dx = targetX - startX
+  const dy = targetY - startY
+  const distance = Math.sqrt(dx * dx + dy * dy)
+  
+  const speedX = (dx / distance) * baseSpeed
+  const speedY = (dy / distance) * baseSpeed * 0.5
+  
+  return { speedX, speedY }
 }
 
 const setupServe = () => {
@@ -395,28 +542,23 @@ const setupServe = () => {
   ball.value.speedX = 0
   ball.value.speedY = 0
   
-  // Reset paddle positions - paddles start outside court for serve
-  playerPaddle.x = 100 // Outside left baseline
+  playerPaddle.x = 100
   playerPaddle.targetX = 100
   playerPaddle.isMovingIn = false
-  computerPaddle.x = 1085 // Outside right baseline
+  computerPaddle.x = 1085
   computerPaddle.targetX = 1085
   computerPaddle.isMovingIn = false
   
   if (isPlayerServe.value) {
-    // Player serves from behind baseline
     const serveFromRight = playerScore.value % 2 === 0
     
-    // Position ball and paddle at serve position
     if (serveFromRight) {
-      // Serve from right court
       const serveY = court.y + 3 * court.height / 4
       playerPaddle.y = serveY - playerPaddle.height / 2
       playerPaddle.targetY = playerPaddle.y
       ball.value.x = playerPaddle.x + playerPaddle.width + 30
       ball.value.y = serveY
     } else {
-      // Serve from left court
       const serveY = court.y + court.height / 4
       playerPaddle.y = serveY - playerPaddle.height / 2
       playerPaddle.targetY = playerPaddle.y
@@ -424,41 +566,32 @@ const setupServe = () => {
       ball.value.y = serveY
     }
     
-    // Position computer paddle in center of their side
     computerPaddle.y = court.y + court.height / 2 - computerPaddle.height / 2
     
   } else {
-    // Computer serves
     const serveFromRight = computerScore.value % 2 === 0
     
-    // Position ball and paddle at serve position
     if (serveFromRight) {
-      // Serve from right court (from computer's perspective, which is left on screen)
       const serveY = court.y + 3 * court.height / 4
       computerPaddle.y = serveY - computerPaddle.height / 2
       ball.value.x = computerPaddle.x - 30
       ball.value.y = serveY
     } else {
-      // Serve from left court (from computer's perspective, which is right on screen)
       const serveY = court.y + court.height / 4
       computerPaddle.y = serveY - computerPaddle.height / 2
       ball.value.x = computerPaddle.x - 30
       ball.value.y = serveY
     }
     
-    // Position player paddle in center of their side
     playerPaddle.y = court.y + court.height / 2 - playerPaddle.height / 2
     playerPaddle.targetY = playerPaddle.y
     
-    // Auto-serve for computer after delay
     setTimeout(() => {
       if (!gameActive.value && isServing.value && !isPlayerServe.value) {
-        // Get serve targets and randomly pick one
         const targets = getServeTargets(false, serveFromRight)
         const targetIndex = Math.floor(Math.random() * 3)
         const target = targets[targetIndex]
         
-        // Calculate velocity to reach target
         const velocity = calculateServeVelocity(
           ball.value.x, ball.value.y,
           target.x, target.y,
@@ -468,12 +601,11 @@ const setupServe = () => {
         ball.value.speedX = velocity.speedX
         ball.value.speedY = velocity.speedY
         isServing.value = false
-        serverJustServed.value = true // Computer just served
-        isFirstReturn.value = true // Waiting for player's first return
+        serverJustServed.value = true
+        isFirstReturn.value = true
         gameActive.value = true
         
-        // Set computer paddle to move inside court after serving
-        computerPaddle.targetX = court.x + court.width - 40 // Inside right baseline
+        computerPaddle.targetX = court.x + court.width - 40
         computerPaddle.isMovingIn = true
         
         lastFrameTime = 0
@@ -482,7 +614,6 @@ const setupServe = () => {
     }, 1500)
   }
   
-  // Force a draw to show the new positions
   draw()
 }
 
@@ -490,12 +621,10 @@ const handleServe = () => {
   if (isServing.value && isPlayerServe.value && !gameActive.value) {
     const serveFromRight = playerScore.value % 2 === 0
     
-    // Get serve targets and randomly pick one
     const targets = getServeTargets(true, serveFromRight)
     const targetIndex = Math.floor(Math.random() * 3)
     const target = targets[targetIndex]
     
-    // Calculate velocity to reach target
     const velocity = calculateServeVelocity(
       ball.value.x, ball.value.y,
       target.x, target.y,
@@ -506,13 +635,12 @@ const handleServe = () => {
     ball.value.speedY = velocity.speedY
     
     isServing.value = false
-    serverJustServed.value = true // Player just served
-    isFirstReturn.value = true // Waiting for computer's first return
+    serverJustServed.value = true
+    isFirstReturn.value = true
     gameActive.value = true
     gameStarted.value = true
     
-    // Set player paddle to move inside court after serving
-    playerPaddle.targetX = court.x + 40 // Inside left baseline
+    playerPaddle.targetX = court.x + 40
     playerPaddle.isMovingIn = true
     
     if (!startTime) {
@@ -533,20 +661,17 @@ const update = (dt) => {
   if (startTime) {
     const now = Date.now()
     const totalSeconds = Math.floor((now - startTime + elapsedTime) / 1000)
-    const minutes = Math.floor(totalSeconds / 60)
-    const seconds = totalSeconds % 60
-    gameTime.value = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+    gameTime.value = totalSeconds
   }
   
-  // Move ball using delta time
+  // Move ball
   ball.value.x += ball.value.speedX * dt
   ball.value.y += ball.value.speedY * dt
   
-  // Ball collision with court boundaries
+  // Ball collision with boundaries
   if (ball.value.y - ball.value.radius < court.y || 
       ball.value.y + ball.value.radius > court.y + court.height) {
     ball.value.speedY = -ball.value.speedY
-    // Ensure ball stays within bounds
     if (ball.value.y - ball.value.radius < court.y) {
       ball.value.y = court.y + ball.value.radius
     } else {
@@ -561,13 +686,11 @@ const update = (dt) => {
       ball.value.y + ball.value.radius > playerPaddle.y) {
     ball.value.speedX = Math.abs(ball.value.speedX) * BALL_ACCELERATION
     const hitPos = (ball.value.y - (playerPaddle.y + playerPaddle.height / 2)) / (playerPaddle.height / 2)
-    ball.value.speedY = hitPos * 360 // pixels per second
-    // Ensure ball doesn't get stuck in paddle
+    ball.value.speedY = hitPos * 360
     ball.value.x = playerPaddle.x + playerPaddle.width + ball.value.radius
     
-    // If this was the first return after computer served, move player paddle in
     if (isFirstReturn.value && !isPlayerServe.value) {
-      playerPaddle.targetX = court.x + 40 // Inside left baseline
+      playerPaddle.targetX = court.x + 40
       playerPaddle.isMovingIn = true
       isFirstReturn.value = false
     }
@@ -579,19 +702,17 @@ const update = (dt) => {
       ball.value.y + ball.value.radius > computerPaddle.y) {
     ball.value.speedX = -Math.abs(ball.value.speedX) * BALL_ACCELERATION
     const hitPos = (ball.value.y - (computerPaddle.y + computerPaddle.height / 2)) / (computerPaddle.height / 2)
-    ball.value.speedY = hitPos * 360 // pixels per second
-    // Ensure ball doesn't get stuck in paddle
+    ball.value.speedY = hitPos * 360
     ball.value.x = computerPaddle.x - ball.value.radius
     
-    // If this was the first return after player served, move computer paddle in
     if (isFirstReturn.value && isPlayerServe.value) {
-      computerPaddle.targetX = court.x + court.width - 40 // Inside right baseline
+      computerPaddle.targetX = court.x + court.width - 40
       computerPaddle.isMovingIn = true
       isFirstReturn.value = false
     }
   }
   
-  // Handle horizontal paddle movement (moving into court after serve)
+  // Paddle horizontal movement
   if (playerPaddle.isMovingIn) {
     const diff = playerPaddle.targetX - playerPaddle.x
     const moveSpeed = PADDLE_MOVE_SPEED * dt
@@ -614,14 +735,14 @@ const update = (dt) => {
     }
   }
   
-  // Smooth player paddle vertical movement (lerp towards target) - only during play
+  // Smooth player paddle vertical movement
   if (!isServing.value) {
-    const paddleSpeed = 0.2 // Smoothing factor
+    const paddleSpeed = 0.2
     playerPaddle.y += (playerPaddle.targetY - playerPaddle.y) * paddleSpeed
   }
   
-  // Computer AI with delta time - only move during play
-  if (!isServing.value && ball.value.speedX > 0) { // Only track when ball is coming towards computer
+  // Computer AI
+  if (!isServing.value && ball.value.speedX > 0) {
     const difficultySpeed = gameSettings?.difficulty?.speed || 1
     const computerSpeed = COMPUTER_BASE_SPEED * difficultySpeed * dt
     const targetY = ball.value.y - computerPaddle.height / 2
@@ -634,56 +755,52 @@ const update = (dt) => {
     }
   }
   
-  // Keep paddles within court boundaries (vertical)
+  // Keep paddles in bounds
   computerPaddle.y = Math.max(court.y, Math.min(court.y + court.height - computerPaddle.height, computerPaddle.y))
   playerPaddle.y = Math.max(court.y, Math.min(court.y + court.height - playerPaddle.height, playerPaddle.y))
   playerPaddle.targetY = Math.max(court.y, Math.min(court.y + court.height - playerPaddle.height, playerPaddle.targetY))
   
-  // Score points and handle serve changes
+  // Score points
   if (ball.value.x < court.x - 50) {
-    // Computer scores
     computerScore.value++
     gameActive.value = false
     
-    // In pickleball, serve changes when serving side loses
     if (isPlayerServe.value) {
-      // Player was serving and lost, change serve
       isPlayerServe.value = false
     }
-    // If computer was serving and scored, they keep serving
     
-    // Cancel animation frame before setting up new serve
     if (animationId) {
       cancelAnimationFrame(animationId)
       animationId = null
     }
     
-    setTimeout(() => setupServe(), 1000)
+    checkWinner()
   } else if (ball.value.x > court.x + court.width + 50) {
-    // Player scores
     playerScore.value++
     gameActive.value = false
     
-    // In pickleball, serve changes when serving side loses
     if (!isPlayerServe.value) {
-      // Computer was serving and lost, change serve
       isPlayerServe.value = true
     }
-    // If player was serving and scored, they keep serving
     
-    // Cancel animation frame before setting up new serve
     if (animationId) {
       cancelAnimationFrame(animationId)
       animationId = null
     }
     
-    setTimeout(() => setupServe(), 1000)
+    checkWinner()
   }
-  
-  // Check for game win (11 points, win by 2)
+}
+
+const checkWinner = () => {
   if ((playerScore.value >= 11 || computerScore.value >= 11) && 
       Math.abs(playerScore.value - computerScore.value) >= 2) {
-    endGame()
+    winner.value = playerScore.value > computerScore.value ? 'You Win!' : 'Computer Wins!'
+    showWinner.value = true
+    gameActive.value = false
+    gameStarted.value = false
+  } else {
+    setTimeout(() => setupServe(), 1000)
   }
 }
 
@@ -694,15 +811,10 @@ const gameLoop = (currentTime) => {
   
   const elapsed = currentTime - lastFrameTime
   
-  // Only update if enough time has passed (frame rate limiting)
   if (elapsed >= frameInterval) {
-    // Calculate delta time in seconds
-    deltaTime = Math.min(elapsed / 1000, 0.1) // Cap at 0.1 seconds to prevent huge jumps
-    
+    deltaTime = Math.min(elapsed / 1000, 0.1)
     update(deltaTime)
     draw()
-    
-    // Update last frame time, accounting for any excess time
     lastFrameTime = currentTime - (elapsed % frameInterval)
   }
   
@@ -711,40 +823,25 @@ const gameLoop = (currentTime) => {
   }
 }
 
-const handleMouseMove = (e) => {
-  if (!isServing.value) { // Only allow paddle movement during play
-    const rect = gameCanvas.value.getBoundingClientRect()
-    const scaleY = canvasHeight.value / rect.height
-    const mouseY = (e.clientY - rect.top) * scaleY
-    playerPaddle.targetY = mouseY - playerPaddle.height / 2
-  }
-}
-
-const handleTouchMove = (e) => {
-  if (!isServing.value) { // Only allow paddle movement during play
-    e.preventDefault()
-    const rect = gameCanvas.value.getBoundingClientRect()
-    const touch = e.touches[0]
-    const scaleY = canvasHeight.value / rect.height
-    const touchY = (touch.clientY - rect.top) * scaleY
-    playerPaddle.targetY = touchY - playerPaddle.height / 2
-  }
-}
-
 const startGame = () => {
   if (!gameStarted.value) {
     gameStarted.value = true
+    showWinner.value = false
     setupServe()
-  } else {
-    // Resume from pause
-    gameActive.value = true
-    lastFrameTime = 0 // Reset frame timing
-    if (!startTime) {
-      startTime = Date.now()
+    if (isMobile.value) {
+      menuOpen.value = false
     }
-    if (!animationId) {
-      gameLoop(performance.now())
-    }
+  }
+}
+
+const resumeGame = () => {
+  gameActive.value = true
+  lastFrameTime = 0
+  if (!startTime) {
+    startTime = Date.now()
+  }
+  if (!animationId) {
+    gameLoop(performance.now())
   }
 }
 
@@ -765,7 +862,7 @@ const resetGame = () => {
   gameStarted.value = false
   playerScore.value = 0
   computerScore.value = 0
-  gameTime.value = '00:00'
+  gameTime.value = 0
   startTime = null
   elapsedTime = 0
   lastFrameTime = 0
@@ -774,14 +871,15 @@ const resetGame = () => {
   isServing.value = true
   isFirstReturn.value = false
   serverJustServed.value = false
+  showWinner.value = false
+  winner.value = ''
+  menuOpen.value = false
   
-  // Reset ball position
-  ball.value.x = -100 // Start off-screen
+  ball.value.x = -100
   ball.value.y = -100
   ball.value.speedX = 0
   ball.value.speedY = 0
   
-  // Reset paddle positions
   playerPaddle.x = 100
   playerPaddle.targetX = 100
   playerPaddle.y = court.y + court.height / 2 - playerPaddle.height / 2
@@ -801,232 +899,318 @@ const resetGame = () => {
   draw()
 }
 
-const endGame = () => {
-  gameActive.value = false
-  const winner = playerScore.value > computerScore.value ? 'You Win!' : 'Computer Wins!'
-  
-  // Cancel animation frame
-  if (animationId) {
-    cancelAnimationFrame(animationId)
-    animationId = null
-  }
-  
-  // Draw winner message
-  setTimeout(() => {
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'
-    ctx.fillRect(0, 0, canvasWidth.value, canvasHeight.value)
-    ctx.fillStyle = '#ffffff'
-    ctx.font = 'bold 48px Poppins'
-    ctx.textAlign = 'center'
-    ctx.fillText(winner, canvasWidth.value / 2, canvasHeight.value / 2)
-    ctx.font = '24px Poppins'
-    ctx.fillText(`Final Score: ${playerScore.value} - ${computerScore.value}`, canvasWidth.value / 2, canvasHeight.value / 2 + 50)
-    ctx.font = '16px Poppins'
-    ctx.fillText('Press Reset to play again', canvasWidth.value / 2, canvasHeight.value / 2 + 100)
-  }, 100)
-}
-
-const toggleFullscreen = () => {
-  if (!document.fullscreenElement) {
-    canvasWrapper.value.requestFullscreen()
-  } else {
-    document.exitFullscreen()
-  }
-}
-
 onMounted(() => {
   ctx = gameCanvas.value.getContext('2d')
   loadGameSettings()
-  // Initialize ball position off-screen
+  checkMobile()
+  resizeCanvas()
+  
   ball.value.x = -100
   ball.value.y = -100
   draw()
+  
+  // Listen for resize
+  window.addEventListener('resize', () => {
+    checkMobile()
+    resizeCanvas()
+  })
+  
+  // Listen for fullscreen changes
+  document.addEventListener('fullscreenchange', () => {
+    isFullscreen.value = !!document.fullscreenElement
+    resizeCanvas()
+  })
+  
+  // Auto-prompt fullscreen on mobile
+  if (isMobile.value) {
+    // Show fullscreen prompt
+  }
 })
 
 onUnmounted(() => {
   if (animationId) {
     cancelAnimationFrame(animationId)
   }
+  window.removeEventListener('resize', resizeCanvas)
 })
 </script>
 
 <style scoped>
 .game-container {
-  background: rgba(26, 26, 46, 0.05);
-  border-radius: var(--radius-lg);
-  padding: 15px;
-  box-shadow: var(--shadow-lg);
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
-.game-controls-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 15px;
-  padding: 10px 20px;
-  background: white;
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-sm);
-}
-
-.score-board {
-  display: flex;
-  align-items: center;
-  gap: 30px;
-}
-
-.score-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.score-label {
-  font-size: 0.75rem;
-  color: #666;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-
-.score-value {
-  font-size: 2rem;
-  font-weight: 700;
-  color: var(--primary-color);
-  line-height: 1;
-}
-
-.timer {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  background: #f0f0f0;
-  border-radius: 20px;
-  font-weight: 600;
-  color: #666;
-}
-
-.game-info {
-  display: flex;
-  align-items: center;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.serve-indicator {
-  padding: 8px 16px;
-  background: var(--gradient-secondary);
-  color: white;
-  border-radius: 20px;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.serve-position {
-  font-size: 0.85rem;
-  color: #666;
-  font-weight: 500;
-}
-
-.game-controls {
-  display: flex;
-  gap: 10px;
-}
-
-.control-btn {
-  width: 40px;
-  height: 40px;
-  border: none;
-  border-radius: 50%;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.3s ease;
-  font-size: 1rem;
-  color: white;
-}
-
-.control-btn.play {
-  background: var(--gradient-primary);
-}
-
-.control-btn.pause {
-  background: linear-gradient(135deg, #ffa500, #ff8c00);
-}
-
-.control-btn.reset {
-  background: linear-gradient(135deg, #6c757d, #495057);
-}
-
-.control-btn.fullscreen {
-  background: linear-gradient(135deg, #007bff, #0056b3);
-}
-
-.control-btn:hover {
-  transform: scale(1.1);
-  box-shadow: var(--shadow-md);
-}
-
-.canvas-wrapper {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #0a0a0a;
-  border-radius: var(--radius-md);
-  padding: 10px;
-  position: relative;
-  overflow: hidden;
-}
-
-canvas {
-  border-radius: var(--radius-md);
   width: 100%;
   height: 100%;
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-  cursor: none;
-}
-
-.canvas-wrapper:fullscreen {
+  position: relative;
   background: #000;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.canvas-wrapper:fullscreen canvas {
-  max-width: 90vw;
-  max-height: 90vh;
+.canvas-wrapper {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
 }
 
+canvas {
+  max-width: 100%;
+  max-height: 100%;
+  display: block;
+  touch-action: none;
+  cursor: none;
+}
+
+/* Floating UI */
+.floating-ui {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+}
+
+.fullscreen-prompt {
+  background: rgba(0, 200, 83, 0.9);
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 25px;
+  font-size: 1rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  animation: pulse 2s infinite;
+  box-shadow: 0 4px 15px rgba(0, 200, 83, 0.4);
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+/* Game Overlay */
+.game-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.serve-instruction {
+  background: rgba(255, 255, 255, 0.95);
+  color: #333;
+  padding: 15px 30px;
+  border-radius: 30px;
+  font-size: 1.1rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  animation: bounce 2s infinite;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
+
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+.winner-overlay {
+  background: rgba(0, 0, 0, 0.9);
+  color: white;
+  padding: 40px;
+  border-radius: 20px;
+  text-align: center;
+  pointer-events: all;
+}
+
+.winner-overlay h2 {
+  font-size: 3rem;
+  margin: 0 0 15px 0;
+  color: #00c853;
+}
+
+.winner-overlay p {
+  font-size: 1.5rem;
+  margin: 0 0 25px 0;
+}
+
+.btn-replay {
+  background: linear-gradient(135deg, #00c853, #00e676);
+  color: white;
+  border: none;
+  padding: 15px 30px;
+  border-radius: 30px;
+  font-size: 1.1rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Start Overlay */
+.start-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 20;
+}
+
+.btn-start {
+  background: linear-gradient(135deg, #00c853, #00e676);
+  color: white;
+  border: none;
+  padding: 20px 40px;
+  border-radius: 35px;
+  font-size: 1.3rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 6px 25px rgba(0, 200, 83, 0.4);
+  transition: transform 0.3s ease;
+}
+
+.btn-start:hover {
+  transform: scale(1.05);
+}
+
+/* FAB Container */
+.fab-container {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  z-index: 100;
+}
+
+.fab {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #00c853, #00e676);
+  color: white;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.3rem;
+  cursor: pointer;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+  transition: all 0.3s ease;
+}
+
+.fab.active {
+  background: linear-gradient(135deg, #ff6b35, #ff8c42);
+  transform: rotate(45deg);
+}
+
+.fab:hover {
+  transform: scale(1.1);
+}
+
+.fab.active:hover {
+  transform: rotate(45deg) scale(1.1);
+}
+
+/* FAB Menu */
+.fab-menu {
+  position: absolute;
+  bottom: 70px;
+  right: 0;
+  background: white;
+  border-radius: 15px;
+  padding: 10px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  min-width: 160px;
+}
+
+.fab-menu-item {
+  width: 100%;
+  padding: 12px 16px;
+  background: transparent;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 1rem;
+  color: #333;
+  transition: background 0.3s ease;
+  text-align: left;
+}
+
+.fab-menu-item:hover {
+  background: #f0f0f0;
+}
+
+.fab-menu-item i {
+  width: 20px;
+  color: #00c853;
+}
+
+/* Transitions */
+.scale-enter-active,
+.scale-leave-active {
+  transition: all 0.3s ease;
+}
+
+.scale-enter-from,
+.scale-leave-to {
+  opacity: 0;
+  transform: scale(0.8);
+}
+
+/* Mobile-specific styles */
 @media (max-width: 768px) {
-  .game-controls-bar {
-    flex-direction: column;
-    gap: 15px;
+  .game-container {
+    padding: 0;
   }
   
-  .score-board {
-    width: 100%;
-    justify-content: space-around;
+  .serve-instruction {
+    padding: 12px 25px;
+    font-size: 1rem;
   }
   
-  .control-btn {
-    width: 35px;
-    height: 35px;
-    font-size: 0.9rem;
+  .winner-overlay h2 {
+    font-size: 2rem;
   }
   
-  .serve-indicator {
-    font-size: 0.9rem;
-    padding: 6px 12px;
+  .winner-overlay p {
+    font-size: 1.2rem;
   }
+  
+  .fab-container {
+    bottom: 15px;
+    right: 15px;
+  }
+  
+  .fab {
+    width: 48px;
+    height: 48px;
+    font-size: 1.1rem;
+  }
+}
+
+/* Fullscreen styles */
+.game-container:fullscreen {
+  padding: 0;
+}
+
+.game-container:-webkit-full-screen {
+  padding: 0;
 }
 </style>
