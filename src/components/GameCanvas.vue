@@ -23,6 +23,33 @@
       </button>
     </div>
 
+    <!-- Mobile Fullscreen Controls - Only show in fullscreen on mobile -->
+    <div v-if="isFullscreen && isMobile" class="mobile-controls-fullscreen">
+      <!-- Up Arrow - Bottom Left -->
+      <button 
+        @touchstart="startPaddleMove('up')"
+        @touchend="stopPaddleMove"
+        @mousedown="startPaddleMove('up')"
+        @mouseup="stopPaddleMove"
+        @mouseleave="stopPaddleMove"
+        class="mobile-control-arrow left"
+      >
+        <i class="fas fa-chevron-up"></i>
+      </button>
+
+      <!-- Down Arrow - Bottom Right -->
+      <button 
+        @touchstart="startPaddleMove('down')"
+        @touchend="stopPaddleMove"
+        @mousedown="startPaddleMove('down')"
+        @mouseup="stopPaddleMove"
+        @mouseleave="stopPaddleMove"
+        class="mobile-control-arrow right"
+      >
+        <i class="fas fa-chevron-down"></i>
+      </button>
+    </div>
+
     <!-- Main Canvas -->
     <div class="canvas-wrapper" ref="canvasWrapper">
       <canvas
@@ -134,6 +161,10 @@ const isMobile = ref(false)
 const touchStartY = ref(0)
 const touchActive = ref(false)
 
+// Mobile button control state
+const paddleMoveDirection = ref(null)
+const paddleMoveSpeed = 400 // Pixels per second for button controls
+
 let ctx = null
 let animationId = null
 let startTime = null
@@ -206,6 +237,15 @@ const checkMobile = () => {
     || (window.innerWidth <= 768)
 }
 
+// Mobile button controls
+const startPaddleMove = (direction) => {
+  paddleMoveDirection.value = direction
+}
+
+const stopPaddleMove = () => {
+  paddleMoveDirection.value = null
+}
+
 // Show side out notification
 const displaySideOut = (losingServer) => {
   showSideOut.value = true
@@ -248,6 +288,9 @@ const resizeCanvas = () => {
 
 // Touch controls
 const handleTouchStart = (e) => {
+  // Don't prevent default if it's a button touch
+  if (e.target.classList.contains('mobile-control-arrow')) return
+  
   e.preventDefault()
   if (!gameStarted.value && isMobile.value) {
     startGame()
@@ -266,16 +309,26 @@ const handleTouchStart = (e) => {
 }
 
 const handleTouchMove = (e) => {
+  // Don't prevent default if it's a button touch
+  if (e.target.classList.contains('mobile-control-arrow')) return
+  
   e.preventDefault()
   if (!touchActive.value || isServing.value) return
   
   const touch = e.touches[0]
   const rect = gameCanvas.value.getBoundingClientRect()
   const touchY = (touch.clientY - rect.top) * (canvasHeight.value / rect.height)
-  playerPaddle.targetY = touchY - playerPaddle.height / 2
+  
+  // Only update target if not using button controls
+  if (!paddleMoveDirection.value) {
+    playerPaddle.targetY = touchY - playerPaddle.height / 2
+  }
 }
 
 const handleTouchEnd = (e) => {
+  // Don't prevent default if it's a button touch
+  if (e.target.classList.contains('mobile-control-arrow')) return
+  
   e.preventDefault()
   touchActive.value = false
 }
@@ -798,6 +851,16 @@ const update = (dt) => {
     gameTime.value = totalSeconds
   }
   
+  // Handle mobile button controls in fullscreen
+  if (isFullscreen.value && isMobile.value && paddleMoveDirection.value && !isServing.value) {
+    const moveSpeed = paddleMoveSpeed * dt
+    if (paddleMoveDirection.value === 'up') {
+      playerPaddle.targetY = Math.max(court.y, playerPaddle.targetY - moveSpeed)
+    } else if (paddleMoveDirection.value === 'down') {
+      playerPaddle.targetY = Math.min(court.y + court.height - playerPaddle.height, playerPaddle.targetY + moveSpeed)
+    }
+  }
+  
   // Move ball
   ball.value.x += ball.value.speedX * dt
   ball.value.y += ball.value.speedY * dt
@@ -1026,6 +1089,7 @@ const resetGame = () => {
   winner.value = ''
   menuOpen.value = false
   rallyCount.value = 0
+  paddleMoveDirection.value = null
   
   ball.value.x = -100
   ball.value.y = -100
