@@ -8,6 +8,14 @@
       </button>
     </div>
     
+    <button 
+      @click="toggleFullscreen" 
+      class="fullscreen-toggle"
+      :title="isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'"
+    >
+      <i class="fas" :class="isFullscreen ? 'fa-compress' : 'fa-expand'"></i>
+    </button>
+
     <!-- Main Canvas -->
     <div class="canvas-wrapper" ref="canvasWrapper">
       <canvas
@@ -28,6 +36,16 @@
           <i class="fas fa-hand-pointer"></i>
           {{ isMobile ? 'Tap to serve' : 'Click to serve' }}
         </div>
+        
+        <!-- Side Out notification -->
+        <transition name="slide-fade">
+          <div v-if="showSideOut" class="side-out-notification">
+            <div class="side-out-content">
+              <h3>SIDE OUT!</h3>
+              <p>{{ sideOutMessage }}</p>
+            </div>
+          </div>
+        </transition>
         
         <!-- Winner overlay -->
         <div v-if="showWinner" class="winner-overlay">
@@ -57,9 +75,9 @@
             <i class="fas fa-redo"></i>
             <span>Reset</span>
           </button>
-          <button @click="toggleFullscreen" class="fab-menu-item" v-if="!isMobile">
-            <i class="fas fa-expand"></i>
-            <span>Fullscreen</span>
+          <button @click="toggleFullscreen" class="fab-menu-item">
+            <i class="fas" :class="isFullscreen ? 'fa-compress' : 'fa-expand'"></i>
+            <span>{{ isFullscreen ? 'Exit Fullscreen' : 'Fullscreen' }}</span>
           </button>
           <button @click="exitGame" class="fab-menu-item">
             <i class="fas fa-home"></i>
@@ -102,6 +120,10 @@ const isServing = ref(true)
 const showWinner = ref(false)
 const winner = ref('')
 
+// Side out notification
+const showSideOut = ref(false)
+const sideOutMessage = ref('')
+
 // UI state
 const menuOpen = ref(false)
 const isFullscreen = ref(false)
@@ -126,6 +148,7 @@ let deltaTime = 0
 // Rally tracking
 let isFirstReturn = ref(false)
 let serverJustServed = ref(false)
+let rallyCount = ref(0) // Track rallies for statistics
 
 // Physics constants
 const BALL_BASE_SPEED = 480
@@ -180,6 +203,21 @@ const computerPaddle = {
 const checkMobile = () => {
   isMobile.value = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
     || (window.innerWidth <= 768)
+}
+
+// Show side out notification
+const displaySideOut = (losingServer) => {
+  showSideOut.value = true
+  if (losingServer === 'player') {
+    sideOutMessage.value = 'You lost serve. Computer\'s turn to serve!'
+  } else {
+    sideOutMessage.value = 'Computer lost serve. Your turn to serve!'
+  }
+  
+  // Auto-hide after 2.5 seconds
+  setTimeout(() => {
+    showSideOut.value = false
+  }, 2500)
 }
 
 // Resize canvas for mobile
@@ -267,7 +305,7 @@ const enterFullscreen = async () => {
       await gameContainer.value.msRequestFullscreen()
     }
     isFullscreen.value = true
-    if (!gameStarted.value) {
+    if (!gameStarted.value && isMobile.value) {
       startGame()
     }
   } catch (err) {
@@ -282,6 +320,7 @@ const toggleFullscreen = () => {
     document.exitFullscreen()
     isFullscreen.value = false
   }
+  menuOpen.value = false
 }
 
 // Menu handling
@@ -326,7 +365,7 @@ const loadGameSettings = () => {
   }
 }
 
-// Enhanced draw function with on-canvas scores
+// Enhanced draw function with on-canvas scores and serve indicator
 const drawCourt = () => {
   const theme = gameSettings?.court || {}
   
@@ -404,7 +443,7 @@ const drawCourt = () => {
   ctx.fillRect(netX - 3, court.y - 25, 6, 20)
   ctx.fillRect(netX - 3, court.y + court.height + 5, 6, 20)
   
-  // Draw scores on canvas (mobile-friendly large scores)
+  // Draw scores on canvas
   ctx.save()
   ctx.font = isMobile.value ? 'bold 60px sans-serif' : 'bold 48px sans-serif'
   ctx.fillStyle = 'rgba(255, 255, 255, 0.9)'
@@ -425,6 +464,23 @@ const drawCourt = () => {
   
   ctx.restore()
   
+  // Draw serve indicator (text only, no arrows)
+  if (!gameActive.value || isServing.value) {
+    ctx.save()
+    ctx.font = 'bold 16px sans-serif'
+    ctx.textAlign = 'center'
+    
+    if (isPlayerServe.value) {
+      ctx.fillStyle = 'rgba(0, 200, 83, 0.9)'
+      ctx.fillText('YOUR SERVE', canvasWidth.value / 2 - 100, 45)
+    } else {
+      ctx.fillStyle = 'rgba(255, 107, 53, 0.9)'
+      ctx.fillText('CPU SERVE', canvasWidth.value / 2 + 100, 45)
+    }
+    
+    ctx.restore()
+  }
+  
   // Draw timer if game is active
   if (gameStarted.value && gameTime.value > 0) {
     const minutes = Math.floor(gameTime.value / 60)
@@ -436,6 +492,16 @@ const drawCourt = () => {
     ctx.fillStyle = 'rgba(255, 255, 255, 0.7)'
     ctx.textAlign = 'center'
     ctx.fillText(timeString, canvasWidth.value / 2, 30)
+    ctx.restore()
+  }
+  
+  // Draw rally count (optional - shows engagement)
+  if (rallyCount.value > 2 && gameActive.value) {
+    ctx.save()
+    ctx.font = '14px sans-serif'
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)'
+    ctx.textAlign = 'center'
+    ctx.fillText(`Rally: ${rallyCount.value} hits`, canvasWidth.value / 2, canvasHeight.value - 20)
     ctx.restore()
   }
 }
@@ -539,6 +605,7 @@ const setupServe = () => {
   isServing.value = true
   isFirstReturn.value = false
   serverJustServed.value = false
+  rallyCount.value = 0
   ball.value.speedX = 0
   ball.value.speedY = 0
   
@@ -689,6 +756,8 @@ const update = (dt) => {
     ball.value.speedY = hitPos * 360
     ball.value.x = playerPaddle.x + playerPaddle.width + ball.value.radius
     
+    rallyCount.value++ // Increment rally count
+    
     if (isFirstReturn.value && !isPlayerServe.value) {
       playerPaddle.targetX = court.x + 40
       playerPaddle.isMovingIn = true
@@ -704,6 +773,8 @@ const update = (dt) => {
     const hitPos = (ball.value.y - (computerPaddle.y + computerPaddle.height / 2)) / (computerPaddle.height / 2)
     ball.value.speedY = hitPos * 360
     ball.value.x = computerPaddle.x - ball.value.radius
+    
+    rallyCount.value++ // Increment rally count
     
     if (isFirstReturn.value && isPlayerServe.value) {
       computerPaddle.targetX = court.x + court.width - 40
@@ -760,13 +831,19 @@ const update = (dt) => {
   playerPaddle.y = Math.max(court.y, Math.min(court.y + court.height - playerPaddle.height, playerPaddle.y))
   playerPaddle.targetY = Math.max(court.y, Math.min(court.y + court.height - playerPaddle.height, playerPaddle.targetY))
   
-  // Score points
+  // CORRECT PICKLEBALL SCORING - Only server can score
   if (ball.value.x < court.x - 50) {
-    computerScore.value++
+    // Ball went past player - player lost the rally
     gameActive.value = false
     
     if (isPlayerServe.value) {
+      // Player was serving and lost - SIDE OUT, no score
       isPlayerServe.value = false
+      displaySideOut('player')
+    } else {
+      // Computer was serving and won - Computer scores
+      computerScore.value++
+      // Computer keeps serving
     }
     
     if (animationId) {
@@ -776,11 +853,17 @@ const update = (dt) => {
     
     checkWinner()
   } else if (ball.value.x > court.x + court.width + 50) {
-    playerScore.value++
+    // Ball went past computer - computer lost the rally
     gameActive.value = false
     
     if (!isPlayerServe.value) {
+      // Computer was serving and lost - SIDE OUT, no score
       isPlayerServe.value = true
+      displaySideOut('computer')
+    } else {
+      // Player was serving and won - Player scores
+      playerScore.value++
+      // Player keeps serving
     }
     
     if (animationId) {
@@ -800,7 +883,7 @@ const checkWinner = () => {
     gameActive.value = false
     gameStarted.value = false
   } else {
-    setTimeout(() => setupServe(), 1000)
+    setTimeout(() => setupServe(), showSideOut.value ? 2500 : 1000)
   }
 }
 
@@ -872,8 +955,10 @@ const resetGame = () => {
   isFirstReturn.value = false
   serverJustServed.value = false
   showWinner.value = false
+  showSideOut.value = false
   winner.value = ''
   menuOpen.value = false
+  rallyCount.value = 0
   
   ball.value.x = -100
   ball.value.y = -100
@@ -920,11 +1005,6 @@ onMounted(() => {
     isFullscreen.value = !!document.fullscreenElement
     resizeCanvas()
   })
-  
-  // Auto-prompt fullscreen on mobile
-  if (isMobile.value) {
-    // Show fullscreen prompt
-  }
 })
 
 onUnmounted(() => {
@@ -936,281 +1016,5 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.game-container {
-  width: 100%;
-  height: 100%;
-  position: relative;
-  background: #000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.canvas-wrapper {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-}
-
-canvas {
-  max-width: 100%;
-  max-height: 100%;
-  display: block;
-  touch-action: none;
-  cursor: none;
-}
-
-/* Floating UI */
-.floating-ui {
-  position: absolute;
-  top: 10px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 10;
-}
-
-.fullscreen-prompt {
-  background: rgba(0, 200, 83, 0.9);
-  color: white;
-  border: none;
-  padding: 12px 24px;
-  border-radius: 25px;
-  font-size: 1rem;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  animation: pulse 2s infinite;
-  box-shadow: 0 4px 15px rgba(0, 200, 83, 0.4);
-}
-
-@keyframes pulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.05); }
-}
-
-/* Game Overlay */
-.game-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  pointer-events: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.serve-instruction {
-  background: rgba(255, 255, 255, 0.95);
-  color: #333;
-  padding: 15px 30px;
-  border-radius: 30px;
-  font-size: 1.1rem;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  animation: bounce 2s infinite;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-}
-
-@keyframes bounce {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-10px); }
-}
-
-.winner-overlay {
-  background: rgba(0, 0, 0, 0.9);
-  color: white;
-  padding: 40px;
-  border-radius: 20px;
-  text-align: center;
-  pointer-events: all;
-}
-
-.winner-overlay h2 {
-  font-size: 3rem;
-  margin: 0 0 15px 0;
-  color: #00c853;
-}
-
-.winner-overlay p {
-  font-size: 1.5rem;
-  margin: 0 0 25px 0;
-}
-
-.btn-replay {
-  background: linear-gradient(135deg, #00c853, #00e676);
-  color: white;
-  border: none;
-  padding: 15px 30px;
-  border-radius: 30px;
-  font-size: 1.1rem;
-  font-weight: 600;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-}
-
-/* Start Overlay */
-.start-overlay {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 20;
-}
-
-.btn-start {
-  background: linear-gradient(135deg, #00c853, #00e676);
-  color: white;
-  border: none;
-  padding: 20px 40px;
-  border-radius: 35px;
-  font-size: 1.3rem;
-  font-weight: 700;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  box-shadow: 0 6px 25px rgba(0, 200, 83, 0.4);
-  transition: transform 0.3s ease;
-}
-
-.btn-start:hover {
-  transform: scale(1.05);
-}
-
-/* FAB Container */
-.fab-container {
-  position: absolute;
-  bottom: 20px;
-  right: 20px;
-  z-index: 100;
-}
-
-.fab {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #00c853, #00e676);
-  color: white;
-  border: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.3rem;
-  cursor: pointer;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
-  transition: all 0.3s ease;
-}
-
-.fab.active {
-  background: linear-gradient(135deg, #ff6b35, #ff8c42);
-  transform: rotate(45deg);
-}
-
-.fab:hover {
-  transform: scale(1.1);
-}
-
-.fab.active:hover {
-  transform: rotate(45deg) scale(1.1);
-}
-
-/* FAB Menu */
-.fab-menu {
-  position: absolute;
-  bottom: 70px;
-  right: 0;
-  background: white;
-  border-radius: 15px;
-  padding: 10px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-  min-width: 160px;
-}
-
-.fab-menu-item {
-  width: 100%;
-  padding: 12px 16px;
-  background: transparent;
-  border: none;
-  border-radius: 10px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 1rem;
-  color: #333;
-  transition: background 0.3s ease;
-  text-align: left;
-}
-
-.fab-menu-item:hover {
-  background: #f0f0f0;
-}
-
-.fab-menu-item i {
-  width: 20px;
-  color: #00c853;
-}
-
-/* Transitions */
-.scale-enter-active,
-.scale-leave-active {
-  transition: all 0.3s ease;
-}
-
-.scale-enter-from,
-.scale-leave-to {
-  opacity: 0;
-  transform: scale(0.8);
-}
-
-/* Mobile-specific styles */
-@media (max-width: 768px) {
-  .game-container {
-    padding: 0;
-  }
-  
-  .serve-instruction {
-    padding: 12px 25px;
-    font-size: 1rem;
-  }
-  
-  .winner-overlay h2 {
-    font-size: 2rem;
-  }
-  
-  .winner-overlay p {
-    font-size: 1.2rem;
-  }
-  
-  .fab-container {
-    bottom: 15px;
-    right: 15px;
-  }
-  
-  .fab {
-    width: 48px;
-    height: 48px;
-    font-size: 1.1rem;
-  }
-}
-
-/* Fullscreen styles */
-.game-container:fullscreen {
-  padding: 0;
-}
-
-.game-container:-webkit-full-screen {
-  padding: 0;
-}
+@import './GameCanvas.css';
 </style>
