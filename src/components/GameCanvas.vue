@@ -1,16 +1,8 @@
 <template>
-  <!-- Template remains the same -->
   <div class="game-container" ref="gameContainer">
-    <!-- Minimal floating UI -->
-    <div class="floating-ui" v-if="!isFullscreen">
-      <button @click="enterFullscreen" class="fullscreen-prompt" v-if="isMobile && !gameStarted">
-        <i class="fas fa-expand"></i>
-        <span>Tap for fullscreen</span>
-      </button>
-    </div>
-    
-    <!-- Top Right Control Buttons -->
+    <!-- Top Right Control Buttons - Same for both desktop and mobile -->
     <div class="top-controls">
+      <!-- Fullscreen Button - Always visible -->
       <button 
         @click="toggleFullscreen" 
         class="control-button fullscreen-toggle"
@@ -19,7 +11,7 @@
         <i class="fas" :class="isFullscreen ? 'fa-compress' : 'fa-expand'"></i>
       </button>
 
-      <!-- Play/Pause Button -->
+      <!-- Play/Pause Button - Show after game starts -->
       <button 
         @click="toggleMenu" 
         class="control-button fab" 
@@ -46,7 +38,7 @@
       
       <!-- Minimal Overlay UI -->
       <div class="game-overlay">
-        <!-- Serve instruction for mobile -->
+        <!-- Serve instruction -->
         <div v-if="isServing && !gameActive" class="serve-instruction">
           <i class="fas fa-hand-pointer"></i>
           {{ isMobile ? 'Tap to serve' : 'Click to serve' }}
@@ -95,10 +87,11 @@
       </div>
     </transition>
     
-    <!-- Start button for desktop/first time -->
-    <div v-if="!gameStarted && !isMobile" class="start-overlay">
+    <!-- Start overlay - Shows start button or prompts to tap screen -->
+    <div v-if="!gameStarted" class="start-overlay">
       <button @click="startGame" class="btn-start">
-        <i class="fas fa-play"></i> Start Game
+        <i class="fas fa-play"></i> 
+        {{ isMobile ? 'Tap to Start' : 'Start Game' }}
       </button>
     </div>
   </div>
