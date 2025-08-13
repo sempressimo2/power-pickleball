@@ -8,13 +8,27 @@
       </button>
     </div>
     
-    <button 
-      @click="toggleFullscreen" 
-      class="fullscreen-toggle"
-      :title="isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'"
-    >
-      <i class="fas" :class="isFullscreen ? 'fa-compress' : 'fa-expand'"></i>
-    </button>
+    <!-- Top Right Control Buttons -->
+    <div class="top-controls">
+      <button 
+        @click="toggleFullscreen" 
+        class="control-button fullscreen-toggle"
+        :title="isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'"
+      >
+        <i class="fas" :class="isFullscreen ? 'fa-compress' : 'fa-expand'"></i>
+      </button>
+
+      <!-- Play/Pause Button -->
+      <button 
+        @click="toggleMenu" 
+        class="control-button fab" 
+        :class="{ active: menuOpen }"
+        v-if="gameStarted"
+        :title="gameActive ? 'Game Menu' : 'Game Menu'"
+      >
+        <i class="fas" :class="menuOpen ? 'fa-times' : (gameActive ? 'fa-pause' : 'fa-play')"></i>
+      </button>
+    </div>
 
     <!-- Main Canvas -->
     <div class="canvas-wrapper" ref="canvasWrapper">
@@ -58,34 +72,27 @@
       </div>
     </div>
     
-    <!-- Floating Action Button (FAB) -->
-    <div class="fab-container" v-if="gameStarted">
-      <button @click="toggleMenu" class="fab" :class="{ active: menuOpen }">
-        <i class="fas" :class="menuOpen ? 'fa-times' : (gameActive ? 'fa-pause' : 'fa-play')"></i>
-      </button>
-      
-      <!-- FAB Menu -->
-      <transition name="scale">
-        <div v-if="menuOpen" class="fab-menu">
-          <button @click="toggleGame" class="fab-menu-item">
-            <i class="fas" :class="gameActive ? 'fa-pause' : 'fa-play'"></i>
-            <span>{{ gameActive ? 'Pause' : 'Resume' }}</span>
-          </button>
-          <button @click="resetGame" class="fab-menu-item">
-            <i class="fas fa-redo"></i>
-            <span>Reset</span>
-          </button>
-          <button @click="toggleFullscreen" class="fab-menu-item">
-            <i class="fas" :class="isFullscreen ? 'fa-compress' : 'fa-expand'"></i>
-            <span>{{ isFullscreen ? 'Exit Fullscreen' : 'Fullscreen' }}</span>
-          </button>
-          <button @click="exitGame" class="fab-menu-item">
-            <i class="fas fa-home"></i>
-            <span>Exit</span>
-          </button>
-        </div>
-      </transition>
-    </div>
+    <!-- Menu positioned below control buttons -->
+    <transition name="scale">
+      <div v-if="menuOpen && gameStarted" class="control-menu">
+        <button @click="toggleGame" class="control-menu-item">
+          <i class="fas" :class="gameActive ? 'fa-pause' : 'fa-play'"></i>
+          <span>{{ gameActive ? 'Pause' : 'Resume' }}</span>
+        </button>
+        <button @click="resetGame" class="control-menu-item">
+          <i class="fas fa-redo"></i>
+          <span>Reset</span>
+        </button>
+        <button @click="toggleFullscreen" class="control-menu-item">
+          <i class="fas" :class="isFullscreen ? 'fa-compress' : 'fa-expand'"></i>
+          <span>{{ isFullscreen ? 'Exit Fullscreen' : 'Fullscreen' }}</span>
+        </button>
+        <button @click="exitGame" class="control-menu-item">
+          <i class="fas fa-home"></i>
+          <span>Exit</span>
+        </button>
+      </div>
+    </transition>
     
     <!-- Start button for desktop/first time -->
     <div v-if="!gameStarted && !isMobile" class="start-overlay">

@@ -55,6 +55,110 @@ canvas {
   50% { transform: scale(1.05); }
 }
 
+/* Top Right Control Buttons */
+.top-controls {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.control-button {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.95);
+  color: #333;
+  border: 2px solid rgba(0, 200, 83, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+  transition: all 0.3s ease;
+}
+
+.control-button:hover {
+  background: rgba(0, 200, 83, 0.95);
+  color: white;
+  transform: scale(1.1);
+  box-shadow: 0 4px 15px rgba(0, 200, 83, 0.4);
+}
+
+.control-button:active {
+  transform: scale(0.95);
+}
+
+/* Fullscreen Button Specific */
+.fullscreen-toggle:not(.in-fullscreen) {
+  animation: gentle-pulse 3s infinite;
+}
+
+@keyframes gentle-pulse {
+  0%, 100% { 
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+  }
+  50% { 
+    box-shadow: 0 2px 20px rgba(0, 200, 83, 0.3);
+  }
+}
+
+/* FAB (Play/Pause Button) Specific */
+.fab.active {
+  background: rgba(255, 107, 53, 0.95);
+  border-color: rgba(255, 107, 53, 0.3);
+  transform: rotate(45deg);
+}
+
+.fab.active:hover {
+  background: rgba(255, 107, 53, 0.95);
+  color: white;
+  transform: rotate(45deg) scale(1.1);
+  box-shadow: 0 4px 15px rgba(255, 107, 53, 0.4);
+}
+
+/* Control Menu positioned below buttons */
+.control-menu {
+  position: absolute;
+  top: 120px; /* Below both buttons with some spacing */
+  right: 15px;
+  background: white;
+  border-radius: 15px;
+  padding: 10px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  min-width: 160px;
+  z-index: 45;
+}
+
+.control-menu-item {
+  width: 100%;
+  padding: 12px 16px;
+  background: transparent;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 1rem;
+  color: #333;
+  transition: background 0.3s ease;
+  text-align: left;
+}
+
+.control-menu-item:hover {
+  background: #f0f0f0;
+}
+
+.control-menu-item i {
+  width: 20px;
+  color: #00c853;
+}
+
 /* Game Overlay */
 .game-overlay {
   position: absolute;
@@ -201,80 +305,6 @@ canvas {
   transform: scale(1.05);
 }
 
-/* FAB Container */
-.fab-container {
-  position: absolute;
-  bottom: 20px;
-  right: 20px;
-  z-index: 100;
-}
-
-.fab {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #00c853, #00e676);
-  color: white;
-  border: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.3rem;
-  cursor: pointer;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
-  transition: all 0.3s ease;
-}
-
-.fab.active {
-  background: linear-gradient(135deg, #ff6b35, #ff8c42);
-  transform: rotate(45deg);
-}
-
-.fab:hover {
-  transform: scale(1.1);
-}
-
-.fab.active:hover {
-  transform: rotate(45deg) scale(1.1);
-}
-
-/* FAB Menu */
-.fab-menu {
-  position: absolute;
-  bottom: 70px;
-  right: 0;
-  background: white;
-  border-radius: 15px;
-  padding: 10px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-  min-width: 160px;
-}
-
-.fab-menu-item {
-  width: 100%;
-  padding: 12px 16px;
-  background: transparent;
-  border: none;
-  border-radius: 10px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 1rem;
-  color: #333;
-  transition: background 0.3s ease;
-  text-align: left;
-}
-
-.fab-menu-item:hover {
-  background: #f0f0f0;
-}
-
-.fab-menu-item i {
-  width: 20px;
-  color: #00c853;
-}
-
 /* Transitions */
 .scale-enter-active,
 .scale-leave-active {
@@ -308,6 +338,29 @@ canvas {
     padding: 0;
   }
   
+  .top-controls {
+    top: 10px;
+    right: 10px;
+    gap: 10px;
+  }
+  
+  .control-button {
+    width: 40px;
+    height: 40px;
+    font-size: 1rem;
+  }
+  
+  .control-menu {
+    top: 100px; /* Adjusted for smaller buttons */
+    right: 10px;
+    min-width: 140px;
+  }
+  
+  .control-menu-item {
+    padding: 10px 14px;
+    font-size: 0.9rem;
+  }
+  
   .serve-instruction {
     padding: 12px 25px;
     font-size: 1rem;
@@ -332,17 +385,6 @@ canvas {
   .winner-overlay p {
     font-size: 1.2rem;
   }
-  
-  .fab-container {
-    bottom: 15px;
-    right: 15px;
-  }
-  
-  .fab {
-    width: 48px;
-    height: 48px;
-    font-size: 1.1rem;
-  }
 }
 
 /* Fullscreen styles */
@@ -354,65 +396,13 @@ canvas {
   padding: 0;
 }
 
-/* Persistent Fullscreen Toggle Button */
-.fullscreen-toggle {
-  position: absolute;
-  top: 15px;
-  right: 15px;
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.95);
-  color: #333;
-  border: 2px solid rgba(0, 200, 83, 0.3);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.1rem;
-  cursor: pointer;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
-  transition: all 0.3s ease;
-  z-index: 50;
-}
-
-.fullscreen-toggle:hover {
-  background: rgba(0, 200, 83, 0.95);
-  color: white;
-  transform: scale(1.1);
-  box-shadow: 0 4px 15px rgba(0, 200, 83, 0.4);
-}
-
-.fullscreen-toggle:active {
-  transform: scale(0.95);
-}
-
-/* Make it more prominent when not in fullscreen */
-.fullscreen-toggle:not(.in-fullscreen) {
-  animation: gentle-pulse 3s infinite;
-}
-
-@keyframes gentle-pulse {
-  0%, 100% { 
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
-  }
-  50% { 
-    box-shadow: 0 2px 20px rgba(0, 200, 83, 0.3);
-  }
-}
-
-/* Mobile adjustments for fullscreen toggle */
-@media (max-width: 768px) {
-  .fullscreen-toggle {
-    width: 40px;
-    height: 40px;
-    font-size: 1rem;
-    top: 10px;
-    right: 10px;
-  }
-}
-
 /* Ensure visibility in fullscreen mode */
-.game-container:fullscreen .fullscreen-toggle,
-.game-container:-webkit-full-screen .fullscreen-toggle {
+.game-container:fullscreen .control-button,
+.game-container:-webkit-full-screen .control-button {
   background: rgba(255, 255, 255, 0.9);
+}
+
+.game-container:fullscreen .control-menu,
+.game-container:-webkit-full-screen .control-menu {
+  background: rgba(255, 255, 255, 0.95);
 }
