@@ -23,33 +23,6 @@
       </button>
     </div>
 
-    <!-- Mobile Fullscreen Controls - Only show in fullscreen on mobile -->
-    <div v-if="isFullscreen && isMobile" class="mobile-controls-fullscreen">
-      <!-- Up Arrow - Bottom Left -->
-      <button 
-        @touchstart="startPaddleMove('up')"
-        @touchend="stopPaddleMove"
-        @mousedown="startPaddleMove('up')"
-        @mouseup="stopPaddleMove"
-        @mouseleave="stopPaddleMove"
-        class="mobile-control-arrow left"
-      >
-        <i class="fas fa-chevron-up"></i>
-      </button>
-
-      <!-- Down Arrow - Bottom Right -->
-      <button 
-        @touchstart="startPaddleMove('down')"
-        @touchend="stopPaddleMove"
-        @mousedown="startPaddleMove('down')"
-        @mouseup="stopPaddleMove"
-        @mouseleave="stopPaddleMove"
-        class="mobile-control-arrow right"
-      >
-        <i class="fas fa-chevron-down"></i>
-      </button>
-    </div>
-
     <!-- Main Canvas -->
     <div class="canvas-wrapper" ref="canvasWrapper">
       <canvas
@@ -66,9 +39,17 @@
       <!-- Minimal Overlay UI -->
       <div class="game-overlay">
         <!-- Serve instruction -->
-        <div v-if="isServing && !gameActive" class="serve-instruction">
-          <i class="fas fa-hand-pointer"></i>
-          {{ isMobile ? 'Tap to serve' : 'Click to serve' }}
+        <div v-if="isServing && isPlayerServe && !gameActive" class="serve-instruction">
+          <i class="fas" :class="isMobile ? 'fa-hand-paper' : 'fa-hand-pointer'"></i>
+          {{ isMobile ? 'Swipe to serve' : 'Click to serve' }}
+        </div>
+        
+        <!-- CPU serve countdown warning -->
+        <div v-if="isServing && !isPlayerServe && !gameActive && cpuServeCountdown > 0" class="cpu-serve-warning">
+          <div class="countdown-circle">
+            <span class="countdown-number">{{ cpuServeCountdown }}</span>
+          </div>
+          <p>CPU serving in {{ cpuServeCountdown }}...</p>
         </div>
         
         <!-- Side Out notification -->
@@ -148,6 +129,10 @@ const isServing = ref(true)
 const showWinner = ref(false)
 const winner = ref('')
 
+// CPU serve countdown
+const cpuServeCountdown = ref(0)
+let cpuServeTimer = null
+
 // Side out notification
 const showSideOut = ref(false)
 const sideOutMessage = ref('')
@@ -157,13 +142,11 @@ const menuOpen = ref(false)
 const isFullscreen = ref(false)
 const isMobile = ref(false)
 
-// Touch control state
+// Touch control state for swipe detection
 const touchStartY = ref(0)
+const touchStartX = ref(0)
 const touchActive = ref(false)
-
-// Mobile button control state
-const paddleMoveDirection = ref(null)
-const paddleMoveSpeed = 400 // Pixels per second for button controls
+const touchStartTime = ref(0)
 
 let ctx = null
 let animationId = null
@@ -187,6 +170,10 @@ const BALL_BASE_SPEED = 480
 const COMPUTER_BASE_SPEED = 270
 const BALL_ACCELERATION = 1.05
 const PADDLE_MOVE_SPEED = 180
+
+// Swipe detection constants
+const SWIPE_MIN_DISTANCE = 50
+const SWIPE_MAX_TIME = 300
 
 // Court dimensions
 const court = {
@@ -237,13 +224,52 @@ const checkMobile = () => {
     || (window.innerWidth <= 768)
 }
 
-// Mobile button controls
-const startPaddleMove = (direction) => {
-  paddleMoveDirection.value = direction
+// Detect swipe gesture
+const detectSwipe = (startX, startY, endX, endY, duration) => {
+  const deltaX = endX - startX
+  const deltaY = endY - startY
+  const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY)
+  
+  if (distance < SWIPE_MIN_DISTANCE || duration > SWIPE_MAX_TIME) {
+    return null
+  }
+  
+  const angle = Math.atan2(deltaY, deltaX) * 180 / Math.PI
+  
+  // Determine swipe direction
+  if (Math.abs(angle) < 45) return 'right'
+  if (Math.abs(angle) > 135) return 'left'
+  if (angle > 45 && angle < 135) return 'down'
+  if (angle < -45 && angle > -135) return 'up'
+  
+  return null
 }
 
-const stopPaddleMove = () => {
-  paddleMoveDirection.value = null
+// CPU serve countdown
+const startCpuServeCountdown = () => {
+  cpuServeCountdown.value = 3
+  
+  cpuServeTimer = setInterval(() => {
+    cpuServeCountdown.value--
+    
+    if (cpuServeCountdown.value <= 0) {
+      clearInterval(cpuServeTimer)
+      cpuServeTimer = null
+      
+      // Auto-serve for CPU
+      if (!gameActive.value && isServing.value && !isPlayerServe.value) {
+        executeCpuServe()
+      }
+    }
+  }, 1000)
+}
+
+const stopCpuServeCountdown = () => {
+  if (cpuServeTimer) {
+    clearInterval(cpuServeTimer)
+    cpuServeTimer = null
+  }
+  cpuServeCountdown.value = 0
 }
 
 // Show side out notification
@@ -286,11 +312,8 @@ const resizeCanvas = () => {
   }
 }
 
-// Touch controls
+// Touch controls with swipe detection
 const handleTouchStart = (e) => {
-  // Don't prevent default if it's a button touch
-  if (e.target.classList.contains('mobile-control-arrow')) return
-  
   e.preventDefault()
   if (!gameStarted.value && isMobile.value) {
     startGame()
@@ -300,36 +323,43 @@ const handleTouchStart = (e) => {
   const touch = e.touches[0]
   const rect = gameCanvas.value.getBoundingClientRect()
   touchStartY.value = (touch.clientY - rect.top) * (canvasHeight.value / rect.height)
+  touchStartX.value = (touch.clientX - rect.left) * (canvasWidth.value / rect.width)
+  touchStartTime.value = Date.now()
   touchActive.value = true
-  
-  // Handle serve on tap
-  if (isServing.value && isPlayerServe.value && !gameActive.value) {
-    handleServe()
-  }
 }
 
 const handleTouchMove = (e) => {
-  // Don't prevent default if it's a button touch
-  if (e.target.classList.contains('mobile-control-arrow')) return
-  
   e.preventDefault()
   if (!touchActive.value || isServing.value) return
   
   const touch = e.touches[0]
   const rect = gameCanvas.value.getBoundingClientRect()
   const touchY = (touch.clientY - rect.top) * (canvasHeight.value / rect.height)
-  
-  // Only update target if not using button controls
-  if (!paddleMoveDirection.value) {
-    playerPaddle.targetY = touchY - playerPaddle.height / 2
-  }
+  playerPaddle.targetY = touchY - playerPaddle.height / 2
 }
 
 const handleTouchEnd = (e) => {
-  // Don't prevent default if it's a button touch
-  if (e.target.classList.contains('mobile-control-arrow')) return
-  
   e.preventDefault()
+  
+  if (touchActive.value && isServing.value && isPlayerServe.value && !gameActive.value) {
+    const touch = e.changedTouches[0]
+    const rect = gameCanvas.value.getBoundingClientRect()
+    const touchEndX = (touch.clientX - rect.left) * (canvasWidth.value / rect.width)
+    const touchEndY = (touch.clientY - rect.top) * (canvasHeight.value / rect.height)
+    const duration = Date.now() - touchStartTime.value
+    
+    const swipeDirection = detectSwipe(
+      touchStartX.value, touchStartY.value,
+      touchEndX, touchEndY,
+      duration
+    )
+    
+    // Serve on any swipe gesture
+    if (swipeDirection) {
+      handleServe()
+    }
+  }
+  
   touchActive.value = false
 }
 
@@ -729,6 +759,8 @@ const setupServe = () => {
   ball.value.speedX = 0
   ball.value.speedY = 0
   
+  stopCpuServeCountdown() // Clear any existing countdown
+  
   playerPaddle.x = 100
   playerPaddle.targetX = 100
   playerPaddle.isMovingIn = false
@@ -773,35 +805,39 @@ const setupServe = () => {
     playerPaddle.y = court.y + court.height / 2 - playerPaddle.height / 2
     playerPaddle.targetY = playerPaddle.y
     
-    setTimeout(() => {
-      if (!gameActive.value && isServing.value && !isPlayerServe.value) {
-        const targets = getServeTargets(false, serveFromRight)
-        const targetIndex = Math.floor(Math.random() * 3)
-        const target = targets[targetIndex]
-        
-        const velocity = calculateServeVelocity(
-          ball.value.x, ball.value.y,
-          target.x, target.y,
-          false
-        )
-        
-        ball.value.speedX = velocity.speedX
-        ball.value.speedY = velocity.speedY
-        isServing.value = false
-        serverJustServed.value = true
-        isFirstReturn.value = true
-        gameActive.value = true
-        
-        computerPaddle.targetX = court.x + court.width - 40
-        computerPaddle.isMovingIn = true
-        
-        lastFrameTime = 0
-        if (!animationId) gameLoop(performance.now())
-      }
-    }, 1500)
+    // Start the 3-second countdown for CPU serve
+    startCpuServeCountdown()
   }
   
   draw()
+}
+
+const executeCpuServe = () => {
+  if (!gameActive.value && isServing.value && !isPlayerServe.value) {
+    const serveFromRight = computerScore.value % 2 === 0
+    const targets = getServeTargets(false, serveFromRight)
+    const targetIndex = Math.floor(Math.random() * 3)
+    const target = targets[targetIndex]
+    
+    const velocity = calculateServeVelocity(
+      ball.value.x, ball.value.y,
+      target.x, target.y,
+      false
+    )
+    
+    ball.value.speedX = velocity.speedX
+    ball.value.speedY = velocity.speedY
+    isServing.value = false
+    serverJustServed.value = true
+    isFirstReturn.value = true
+    gameActive.value = true
+    
+    computerPaddle.targetX = court.x + court.width - 40
+    computerPaddle.isMovingIn = true
+    
+    lastFrameTime = 0
+    if (!animationId) gameLoop(performance.now())
+  }
 }
 
 const handleServe = () => {
@@ -849,16 +885,6 @@ const update = (dt) => {
     const now = Date.now()
     const totalSeconds = Math.floor((now - startTime + elapsedTime) / 1000)
     gameTime.value = totalSeconds
-  }
-  
-  // Handle mobile button controls in fullscreen
-  if (isFullscreen.value && isMobile.value && paddleMoveDirection.value && !isServing.value) {
-    const moveSpeed = paddleMoveSpeed * dt
-    if (paddleMoveDirection.value === 'up') {
-      playerPaddle.targetY = Math.max(court.y, playerPaddle.targetY - moveSpeed)
-    } else if (paddleMoveDirection.value === 'down') {
-      playerPaddle.targetY = Math.min(court.y + court.height - playerPaddle.height, playerPaddle.targetY + moveSpeed)
-    }
   }
   
   // Move ball
@@ -1089,7 +1115,8 @@ const resetGame = () => {
   winner.value = ''
   menuOpen.value = false
   rallyCount.value = 0
-  paddleMoveDirection.value = null
+  
+  stopCpuServeCountdown() // Clear countdown on reset
   
   ball.value.x = -100
   ball.value.y = -100
@@ -1155,6 +1182,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  stopCpuServeCountdown() // Clean up countdown on unmount
   if (animationId) {
     cancelAnimationFrame(animationId)
   }

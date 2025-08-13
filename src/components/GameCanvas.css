@@ -514,3 +514,83 @@ button {
   -moz-appearance: none;
   appearance: none;
 }
+
+/* CPU Serve Warning Countdown */
+.cpu-serve-warning {
+  background: rgba(255, 107, 53, 0.95);
+  color: white;
+  padding: 20px 30px;
+  border-radius: 15px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 15px;
+  box-shadow: 0 8px 30px rgba(255, 107, 53, 0.5);
+  animation: pulseWarning 1s infinite alternate;
+}
+
+.countdown-circle {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  border: 3px solid white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: countdownSpin 1s linear infinite;
+}
+
+.countdown-number {
+  font-size: 1.8rem;
+  font-weight: 800;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.cpu-serve-warning p {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  opacity: 0.95;
+}
+
+@keyframes pulseWarning {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 8px 30px rgba(255, 107, 53, 0.5);
+  }
+  100% {
+    transform: scale(1.05);
+    box-shadow: 0 12px 40px rgba(255, 107, 53, 0.7);
+  }
+}
+
+@keyframes countdownSpin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* Mobile adjustments for CPU warning */
+@media (max-width: 768px) and (orientation: portrait) {
+  .cpu-serve-warning {
+    padding: 15px 25px;
+  }
+  
+  .countdown-circle {
+    width: 50px;
+    height: 50px;
+  }
+  
+  .countdown-number {
+    font-size: 1.5rem;
+  }
+  
+  .cpu-serve-warning p {
+    font-size: 1rem;
+  }
+}
