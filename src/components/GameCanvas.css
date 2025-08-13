@@ -78,14 +78,14 @@ canvas {
 
 .mobile-control-arrow {
   position: absolute;
-  bottom: 20px;
-  width: 80px;
-  height: 80px;
+  bottom: 40px;  /* Increased from 20px for more padding */
+  width: 100px;  /* Increased clickable area from 80px */
+  height: 100px; /* Increased clickable area from 80px */
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.9);
   border: 3px solid rgba(0, 200, 83, 0.5);
   color: #333;
-  font-size: 2rem;
+  font-size: 2rem;  /* Keep icon size the same */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -96,14 +96,29 @@ canvas {
   -webkit-tap-highlight-color: transparent;
   user-select: none;
   -webkit-user-select: none;
+  /* Add padding to increase touch target without changing visual size */
+  padding: 10px;
+  box-sizing: border-box;
+}
+
+/* Add invisible extended touch area */
+.mobile-control-arrow::before {
+  content: '';
+  position: absolute;
+  top: -15px;
+  left: -15px;
+  right: -15px;
+  bottom: -15px;
+  border-radius: 50%;
+  z-index: -1;
 }
 
 .mobile-control-arrow.left {
-  left: 20px;
+  left: 40px;  /* Increased from 20px for more padding from edge */
 }
 
 .mobile-control-arrow.right {
-  right: 20px;
+  right: 40px;  /* Increased from 20px for more padding from edge */
 }
 
 .mobile-control-arrow:active {
@@ -115,6 +130,53 @@ canvas {
 
 .mobile-control-arrow i {
   pointer-events: none;
+  /* Keep icon visually centered and same size */
+  font-size: 2rem;
+}
+
+/* Adjust for smaller screens in fullscreen */
+@media (max-height: 500px) {
+  .mobile-control-arrow {
+    width: 80px;   /* Smaller but still larger clickable area */
+    height: 80px;
+    font-size: 1.5rem;
+    bottom: 25px;  /* Still maintain padding from edge */
+    padding: 8px;
+  }
+  
+  .mobile-control-arrow.left {
+    left: 30px;  /* Maintain padding even on small screens */
+  }
+  
+  .mobile-control-arrow.right {
+    right: 30px;
+  }
+  
+  .mobile-control-arrow i {
+    font-size: 1.5rem;
+  }
+}
+
+/* For very small landscape screens */
+@media (max-height: 400px) {
+  .mobile-control-arrow {
+    width: 70px;
+    height: 70px;
+    bottom: 20px;
+    padding: 6px;
+  }
+  
+  .mobile-control-arrow.left {
+    left: 25px;
+  }
+  
+  .mobile-control-arrow.right {
+    right: 25px;
+  }
+  
+  .mobile-control-arrow i {
+    font-size: 1.3rem;
+  }
 }
 
 /* Adjust for smaller screens in fullscreen */
