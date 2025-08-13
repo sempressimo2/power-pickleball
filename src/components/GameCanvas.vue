@@ -1,4 +1,5 @@
 <template>
+  <!-- Template remains the same -->
   <div class="game-container" ref="gameContainer">
     <!-- Minimal floating UI -->
     <div class="floating-ui" v-if="!isFullscreen">
@@ -301,9 +302,10 @@ const handleCanvasClick = () => {
   }
 }
 
-// Fullscreen handling
+// Enhanced fullscreen handling with orientation lock
 const enterFullscreen = async () => {
   try {
+    // Request fullscreen first
     if (gameContainer.value.requestFullscreen) {
       await gameContainer.value.requestFullscreen()
     } else if (gameContainer.value.webkitRequestFullscreen) {
@@ -311,12 +313,66 @@ const enterFullscreen = async () => {
     } else if (gameContainer.value.msRequestFullscreen) {
       await gameContainer.value.msRequestFullscreen()
     }
+    
     isFullscreen.value = true
-    if (!gameStarted.value && isMobile.value) {
-      startGame()
+    
+    // Lock orientation to landscape on mobile devices
+    if (isMobile.value && screen.orientation && screen.orientation.lock) {
+      try {
+        await screen.orientation.lock('landscape')
+        console.log('Orientation locked to landscape')
+      } catch (orientationError) {
+        console.log('Orientation lock not supported or failed:', orientationError)
+        // Fallback: try different landscape orientations
+        try {
+          await screen.orientation.lock('landscape-primary')
+        } catch (fallbackError) {
+          try {
+            await screen.orientation.lock('landscape-secondary')
+          } catch (finalError) {
+            console.log('All orientation lock attempts failed')
+          }
+        }
+      }
     }
+    
+    // Start game automatically on mobile after fullscreen
+    if (!gameStarted.value && isMobile.value) {
+      // Small delay to let orientation change settle
+      setTimeout(() => {
+        startGame()
+      }, 500)
+    }
+    
   } catch (err) {
     console.error('Fullscreen failed:', err)
+  }
+}
+
+const exitFullscreen = async () => {
+  try {
+    if (document.exitFullscreen) {
+      await document.exitFullscreen()
+    } else if (document.webkitExitFullscreen) {
+      await document.webkitExitFullscreen()
+    } else if (document.msExitFullscreen) {
+      await document.msExitFullscreen()
+    }
+    
+    isFullscreen.value = false
+    
+    // Unlock orientation when exiting fullscreen on mobile
+    if (isMobile.value && screen.orientation && screen.orientation.unlock) {
+      try {
+        screen.orientation.unlock()
+        console.log('Orientation unlocked')
+      } catch (orientationError) {
+        console.log('Orientation unlock failed:', orientationError)
+      }
+    }
+    
+  } catch (err) {
+    console.error('Exit fullscreen failed:', err)
   }
 }
 
@@ -324,8 +380,7 @@ const toggleFullscreen = () => {
   if (!document.fullscreenElement) {
     enterFullscreen()
   } else {
-    document.exitFullscreen()
-    isFullscreen.value = false
+    exitFullscreen()
   }
   menuOpen.value = false
 }
@@ -1001,16 +1056,32 @@ onMounted(() => {
   ball.value.y = -100
   draw()
   
-  // Listen for resize
+  // Listen for resize and orientation changes
   window.addEventListener('resize', () => {
     checkMobile()
     resizeCanvas()
   })
   
+  window.addEventListener('orientationchange', () => {
+    setTimeout(() => {
+      checkMobile()
+      resizeCanvas()
+    }, 500) // Delay to let orientation change settle
+  })
+  
   // Listen for fullscreen changes
   document.addEventListener('fullscreenchange', () => {
     isFullscreen.value = !!document.fullscreenElement
-    resizeCanvas()
+    setTimeout(() => {
+      resizeCanvas()
+    }, 100)
+  })
+  
+  // Handle fullscreen exit via escape key
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && isFullscreen.value) {
+      exitFullscreen()
+    }
   })
 })
 
@@ -1019,6 +1090,7 @@ onUnmounted(() => {
     cancelAnimationFrame(animationId)
   }
   window.removeEventListener('resize', resizeCanvas)
+  window.removeEventListener('orientationchange', resizeCanvas)
 })
 </script>
 
