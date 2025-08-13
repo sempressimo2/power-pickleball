@@ -65,6 +65,76 @@ canvas {
   transform: scale(0.95);
 }
 
+/* Mobile Fullscreen Controls */
+.mobile-controls-fullscreen {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  width: 100%;
+  z-index: 45;
+  pointer-events: none;
+}
+
+.mobile-control-arrow {
+  position: absolute;
+  bottom: 20px;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  border: 3px solid rgba(0, 200, 83, 0.5);
+  color: #333;
+  font-size: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  pointer-events: all;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  transition: all 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.mobile-control-arrow.left {
+  left: 20px;
+}
+
+.mobile-control-arrow.right {
+  right: 20px;
+}
+
+.mobile-control-arrow:active {
+  background: rgba(0, 200, 83, 0.95);
+  color: white;
+  transform: scale(0.92);
+  box-shadow: 0 2px 10px rgba(0, 200, 83, 0.5);
+}
+
+.mobile-control-arrow i {
+  pointer-events: none;
+}
+
+/* Adjust for smaller screens in fullscreen */
+@media (max-height: 500px) {
+  .mobile-control-arrow {
+    width: 60px;
+    height: 60px;
+    font-size: 1.5rem;
+    bottom: 15px;
+  }
+  
+  .mobile-control-arrow.left {
+    left: 15px;
+  }
+  
+  .mobile-control-arrow.right {
+    right: 15px;
+  }
+}
+
 /* Fullscreen Button Animation */
 .fullscreen-toggle:not(.in-fullscreen) {
   animation: gentle-pulse 3s infinite;
@@ -369,6 +439,11 @@ canvas {
 .game-container:fullscreen .control-menu,
 .game-container:-webkit-full-screen .control-menu {
   background: rgba(255, 255, 255, 0.98);
+}
+
+.game-container:fullscreen .mobile-control-arrow,
+.game-container:-webkit-full-screen .mobile-control-arrow {
+  background: rgba(255, 255, 255, 0.9);
 }
 
 /* Remove any default mobile browser button styling */
