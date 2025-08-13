@@ -182,8 +182,8 @@ const ball = ref({
 const playerPaddle = {
   x: 100,
   y: 250,
-  width: 15,
-  height: 75,
+  width: 14,
+  height: 68,
   color: '#00c853',
   targetY: 250,
   targetX: 100,
@@ -570,11 +570,23 @@ const drawPaddle = (paddle) => {
 }
 
 const drawBall = () => {
-  ctx.shadowBlur = 15
+  // Calculate distance from the net for scaling effect
+  const distanceFromNet = Math.abs(ball.value.x - netX)
+  const maxDistance = court.width / 2
+  
+  // Calculate scale factor (1.0 at the ends, up to 1.3 at the net)
+  // Using a smooth cosine curve for natural scaling
+  const normalizedDistance = Math.min(distanceFromNet / maxDistance, 1)
+  const scaleFactor = 1 + (0.3 * (1 - normalizedDistance) * (1 - normalizedDistance))
+  
+  // Apply scaling to the ball radius
+  const scaledRadius = ball.value.radius * scaleFactor
+  
+  ctx.shadowBlur = 15 * scaleFactor
   ctx.shadowColor = ball.value.color
   ctx.fillStyle = ball.value.color
   ctx.beginPath()
-  ctx.arc(ball.value.x, ball.value.y, ball.value.radius, 0, Math.PI * 2)
+  ctx.arc(ball.value.x, ball.value.y, scaledRadius, 0, Math.PI * 2)
   ctx.fill()
   ctx.shadowBlur = 0
 }
