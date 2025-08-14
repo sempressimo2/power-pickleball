@@ -2,6 +2,16 @@
   <div class="game-container" ref="gameContainer">
     <!-- Top Right Control Buttons - Same for both desktop and mobile -->
     <div class="top-controls">
+      <!-- Audio Toggle Button -->
+      <button 
+        @click="toggleAudio" 
+        class="control-button audio-toggle"
+        :class="{ muted: !audioEnabled }"
+        :title="audioEnabled ? 'Mute Sounds' : 'Enable Sounds'"
+      >
+        <i class="fas" :class="audioEnabled ? 'fa-volume-up' : 'fa-volume-mute'"></i>
+      </button>
+
       <!-- Fullscreen Button - Always visible -->
       <button 
         @click="toggleFullscreen" 
@@ -84,6 +94,10 @@
           <i class="fas fa-redo"></i>
           <span>Reset</span>
         </button>
+        <button @click="toggleAudio" class="control-menu-item">
+          <i class="fas" :class="audioEnabled ? 'fa-volume-up' : 'fa-volume-mute'"></i>
+          <span>{{ audioEnabled ? 'Mute' : 'Unmute' }}</span>
+        </button>
         <button @click="toggleFullscreen" class="control-menu-item">
           <i class="fas" :class="isFullscreen ? 'fa-compress' : 'fa-expand'"></i>
           <span>{{ isFullscreen ? 'Exit Fullscreen' : 'Fullscreen' }}</span>
@@ -108,8 +122,13 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { useAudio } from '../composables/useAudio.js'
 
 const router = useRouter()
+
+// Initialize audio system
+const { audioEnabled, gameSounds, initAudio, toggleAudio, preloadAudio } = useAudio()
+
 const gameContainer = ref(null)
 const gameCanvas = ref(null)
 const canvasWrapper = ref(null)
@@ -250,6 +269,9 @@ const startCpuServeCountdown = () => {
   cpuServeCountdown.value = 3
   
   cpuServeTimer = setInterval(() => {
+    if (cpuServeCountdown.value > 1) {
+      gameSounds.countdown() // Play countdown sound
+    }
     cpuServeCountdown.value--
     
     if (cpuServeCountdown.value <= 0) {
@@ -453,6 +475,7 @@ const exitFullscreen = async () => {
 }
 
 const toggleFullscreen = () => {
+  gameSounds.menuClick() // Play menu sound
   if (!document.fullscreenElement) {
     enterFullscreen()
   } else {
@@ -463,10 +486,12 @@ const toggleFullscreen = () => {
 
 // Menu handling
 const toggleMenu = () => {
+  gameSounds.menuOpen() // Play menu open sound
   menuOpen.value = !menuOpen.value
 }
 
 const toggleGame = () => {
+  gameSounds.menuClick() // Play menu click sound
   if (gameActive.value) {
     pauseGame()
   } else {
@@ -476,6 +501,7 @@ const toggleGame = () => {
 }
 
 const exitGame = () => {
+  gameSounds.menuClick() // Play menu click sound
   router.push('/')
 }
 
@@ -814,6 +840,8 @@ const setupServe = () => {
 
 const executeCpuServe = () => {
   if (!gameActive.value && isServing.value && !isPlayerServe.value) {
+    gameSounds.serve() // Play serve sound
+    
     const serveFromRight = computerScore.value % 2 === 0
     const targets = getServeTargets(false, serveFromRight)
     const targetIndex = Math.floor(Math.random() * 3)
@@ -842,6 +870,8 @@ const executeCpuServe = () => {
 
 const handleServe = () => {
   if (isServing.value && isPlayerServe.value && !gameActive.value) {
+    gameSounds.serve() // Play serve sound
+    
     const serveFromRight = playerScore.value % 2 === 0
     
     const targets = getServeTargets(true, serveFromRight)
@@ -894,6 +924,9 @@ const update = (dt) => {
   // Ball collision with boundaries
   if (ball.value.y - ball.value.radius < court.y || 
       ball.value.y + ball.value.radius > court.y + court.height) {
+    
+    gameSounds.wallBounce() // Play wall bounce sound
+    
     ball.value.speedY = -ball.value.speedY
     if (ball.value.y - ball.value.radius < court.y) {
       ball.value.y = court.y + ball.value.radius
@@ -907,6 +940,9 @@ const update = (dt) => {
       ball.value.x + ball.value.radius > playerPaddle.x &&
       ball.value.y - ball.value.radius < playerPaddle.y + playerPaddle.height &&
       ball.value.y + ball.value.radius > playerPaddle.y) {
+    
+    gameSounds.paddleHit(0.8) // Play paddle hit sound
+    
     ball.value.speedX = Math.abs(ball.value.speedX) * BALL_ACCELERATION
     const hitPos = (ball.value.y - (playerPaddle.y + playerPaddle.height / 2)) / (playerPaddle.height / 2)
     ball.value.speedY = hitPos * 360
@@ -925,6 +961,9 @@ const update = (dt) => {
       ball.value.x - ball.value.radius < computerPaddle.x + computerPaddle.width &&
       ball.value.y - ball.value.radius < computerPaddle.y + computerPaddle.height &&
       ball.value.y + ball.value.radius > computerPaddle.y) {
+    
+    gameSounds.paddleHit(0.9) // Play paddle hit sound
+    
     ball.value.speedX = -Math.abs(ball.value.speedX) * BALL_ACCELERATION
     const hitPos = (ball.value.y - (computerPaddle.y + computerPaddle.height / 2)) / (computerPaddle.height / 2)
     ball.value.speedY = hitPos * 360
@@ -994,10 +1033,12 @@ const update = (dt) => {
     
     if (isPlayerServe.value) {
       // Player was serving and lost - SIDE OUT, no score
+      gameSounds.sideOut() // Play side out sound
       isPlayerServe.value = false
       displaySideOut('player')
     } else {
       // Computer was serving and won - Computer scores
+      gameSounds.score() // Play score sound
       computerScore.value++
       // Computer keeps serving
     }
@@ -1014,10 +1055,12 @@ const update = (dt) => {
     
     if (!isPlayerServe.value) {
       // Computer was serving and lost - SIDE OUT, no score
+      gameSounds.sideOut() // Play side out sound
       isPlayerServe.value = true
       displaySideOut('computer')
     } else {
       // Player was serving and won - Player scores
+      gameSounds.score() // Play score sound
       playerScore.value++
       // Player keeps serving
     }
@@ -1034,6 +1077,9 @@ const update = (dt) => {
 const checkWinner = () => {
   if ((playerScore.value >= 11 || computerScore.value >= 11) && 
       Math.abs(playerScore.value - computerScore.value) >= 2) {
+    
+    gameSounds.gameWin() // Play game win sound
+    
     winner.value = playerScore.value > computerScore.value ? 'You Win!' : 'Computer Wins!'
     showWinner.value = true
     gameActive.value = false
@@ -1064,6 +1110,8 @@ const gameLoop = (currentTime) => {
 
 const startGame = () => {
   if (!gameStarted.value) {
+    gameSounds.gameStart() // Play game start sound
+    
     gameStarted.value = true
     showWinner.value = false
     setupServe()
@@ -1097,6 +1145,8 @@ const pauseGame = () => {
 }
 
 const resetGame = () => {
+  gameSounds.menuClick() // Play menu click sound
+  
   gameActive.value = false
   gameStarted.value = false
   playerScore.value = 0
@@ -1142,15 +1192,22 @@ const resetGame = () => {
   draw()
 }
 
-onMounted(() => {
+onMounted(async () => {
   ctx = gameCanvas.value.getContext('2d')
   loadGameSettings()
   checkMobile()
   resizeCanvas()
   
+  // Initialize audio system
+  await initAudio()
+  
   ball.value.x = -100
   ball.value.y = -100
   draw()
+  
+  // Add click/touch handlers for mobile audio context
+  gameContainer.value.addEventListener('click', preloadAudio, { once: true })
+  gameContainer.value.addEventListener('touchstart', preloadAudio, { once: true })
   
   // Listen for resize and orientation changes
   window.addEventListener('resize', () => {
@@ -1193,4 +1250,19 @@ onUnmounted(() => {
 
 <style scoped>
 @import './GameCanvas.css';
+
+/* Additional CSS for audio button */
+.audio-toggle.muted {
+  opacity: 0.6;
+  color: #ff6b6b;
+}
+
+.audio-toggle {
+  color: #4ecdc4;
+  transition: color 0.3s ease, opacity 0.3s ease;
+}
+
+.audio-toggle:hover {
+  color: #26a69a;
+}
 </style>
