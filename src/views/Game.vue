@@ -1,11 +1,18 @@
 <template>
   <div class="game-page">
-    <GameCanvas />
+    <component :is="gameComponent" />
   </div>
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import GameCanvas from '../components/GameCanvas.vue'
+import GameCanvasMultiplayer from '../components/GameCanvasMultiplayer.vue'
+
+const gameSettings = JSON.parse(sessionStorage.getItem('gameSettings') || '{}')
+const gameComponent = computed(() => {
+  return gameSettings.gameType === 'online' ? GameCanvasMultiplayer : GameCanvas
+})
 </script>
 
 <style scoped>
@@ -18,7 +25,6 @@ import GameCanvas from '../components/GameCanvas.vue'
   background: #000;
 }
 
-/* Mobile - hide nav and footer for full screen */
 @media (max-width: 768px) {
   .game-page {
     height: 100vh;
