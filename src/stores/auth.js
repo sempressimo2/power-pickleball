@@ -1,3 +1,4 @@
+// stores/auth.js
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { loginApi, registerApi, meApi, logoutApi } from '../api/auth'

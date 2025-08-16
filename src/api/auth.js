@@ -1,3 +1,4 @@
+// api/auth.js
 import { apiRequest } from './client';
 
 export async function loginApi(email, password) {
