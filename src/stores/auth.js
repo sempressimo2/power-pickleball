@@ -1,7 +1,5 @@
-
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import * as api from '../api/auth'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(null)
@@ -10,18 +8,11 @@ export const useAuthStore = defineStore('auth', () => {
   const isAuthenticated = computed(() => !!token.value)
   const isGuest = computed(() => !token.value)
 
-
-  async function login({ email, password }) {
-    try {
-      const data = await api.login(email, password)
-      user.value = data
-      token.value = data.token
-      localStorage.setItem('token', data.token)
-      localStorage.setItem('user', JSON.stringify(data))
-      return { success: true }
-    } catch (err) {
-      return { success: false, error: err.response?.data?.message || 'Login failed' }
-    }
+  function login(userData) {
+    user.value = userData
+    token.value = userData.token
+    localStorage.setItem('token', userData.token)
+    localStorage.setItem('user', JSON.stringify(userData))
   }
 
   function logout() {
@@ -31,18 +22,11 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('user')
   }
 
-
-  async function register({ email, password, displayName }) {
-    try {
-      const data = await api.register(email, password, displayName)
-      user.value = data
-      token.value = data.token
-      localStorage.setItem('token', data.token)
-      localStorage.setItem('user', JSON.stringify(data))
-      return { success: true }
-    } catch (err) {
-      return { success: false, error: err.response?.data?.message || 'Registration failed' }
-    }
+  function register(userData) {
+    user.value = userData
+    token.value = userData.token
+    localStorage.setItem('token', userData.token)
+    localStorage.setItem('user', JSON.stringify(userData))
   }
 
   function initAuth() {
