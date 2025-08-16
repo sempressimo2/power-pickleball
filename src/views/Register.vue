@@ -113,23 +113,22 @@ const handleRegister = async () => {
     return
   }
   
-  // Simulate API call
-  setTimeout(() => {
-    if (username.value && email.value && password.value) {
-      success.value = true
-      authStore.register({
-        id: 1,
-        name: username.value,
-        email: email.value,
-        token: 'fake-jwt-token'
-      })
-      
-      setTimeout(() => {
-        router.push('/game')
-      }, 1500)
-    }
-    loading.value = false
-  }, 1000)
+
+  // Real API call
+  const result = await authStore.register({
+    email: email.value,
+    password: password.value,
+    displayName: username.value
+  })
+  loading.value = false
+  if (result.success) {
+    success.value = true
+    setTimeout(() => {
+      router.push('/game')
+    }, 1500)
+  } else {
+    error.value = result.error || 'Registration failed'
+  }
 }
 </script>
 

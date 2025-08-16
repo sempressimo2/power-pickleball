@@ -75,25 +75,17 @@ const rememberMe = ref(false)
 const loading = ref(false)
 const error = ref('')
 
+
 const handleLogin = async () => {
   loading.value = true
   error.value = ''
-  
-  // Simulate API call
-  setTimeout(() => {
-    if (email.value && password.value) {
-      authStore.login({
-        id: 1,
-        name: email.value.split('@')[0],
-        email: email.value,
-        token: 'fake-jwt-token'
-      })
-      router.push('/game')
-    } else {
-      error.value = 'Invalid email or password'
-    }
-    loading.value = false
-  }, 1000)
+  const result = await authStore.login({ email: email.value, password: password.value })
+  loading.value = false
+  if (result.success) {
+    router.push('/game')
+  } else {
+    error.value = result.error || 'Invalid email or password'
+  }
 }
 
 const playAsGuest = () => {
