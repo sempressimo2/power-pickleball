@@ -99,37 +99,31 @@ const success = ref(false)
 const handleRegister = async () => {
   loading.value = true
   error.value = ''
-  
-  // Validation
+  success.value = false
+
   if (password.value !== confirmPassword.value) {
     error.value = 'Passwords do not match'
     loading.value = false
     return
   }
-  
   if (password.value.length < 8) {
     error.value = 'Password must be at least 8 characters'
     loading.value = false
     return
   }
-  
-  // Simulate API call
-  setTimeout(() => {
-    if (username.value && email.value && password.value) {
-      success.value = true
-      authStore.register({
-        id: 1,
-        name: username.value,
-        email: email.value,
-        token: 'fake-jwt-token'
-      })
-      
-      setTimeout(() => {
-        router.push('/game')
-      }, 1500)
-    }
+  try {
+    await authStore.register({
+      email: email.value,
+      password: password.value,
+      displayName: username.value
+    })
+    success.value = true
+    setTimeout(() => router.push('/game'), 1200)
+  } catch (e) {
+    error.value = e.message || 'Registration failed'
+  } finally {
     loading.value = false
-  }, 1000)
+  }
 }
 </script>
 

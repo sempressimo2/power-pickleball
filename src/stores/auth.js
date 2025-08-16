@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { loginApi, registerApi, meApi, logoutApi } from '../api/auth'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(null)
@@ -8,31 +9,55 @@ export const useAuthStore = defineStore('auth', () => {
   const isAuthenticated = computed(() => !!token.value)
   const isGuest = computed(() => !token.value)
 
-  function login(userData) {
-    user.value = userData
-    token.value = userData.token
-    localStorage.setItem('token', userData.token)
-    localStorage.setItem('user', JSON.stringify(userData))
+  async function login(credentials) {
+    const data = await loginApi(credentials.email, credentials.password)
+    user.value = {
+      userId: data.userId,
+      displayName: data.displayName,
+      email: data.email
+    }
+    token.value = data.token
+    localStorage.setItem('token', data.token)
+    localStorage.setItem('user', JSON.stringify(user.value))
+    return data
   }
 
-  function logout() {
+  async function logout() {
+    if (token.value) {
+      try { await logoutApi(token.value) } catch { /* ignore */ }
+    }
     user.value = null
     token.value = null
     localStorage.removeItem('token')
     localStorage.removeItem('user')
   }
 
-  function register(userData) {
-    user.value = userData
-    token.value = userData.token
-    localStorage.setItem('token', userData.token)
-    localStorage.setItem('user', JSON.stringify(userData))
+  async function register(payload) {
+    const data = await registerApi(payload.email, payload.password, payload.displayName)
+    user.value = {
+      userId: data.userId,
+      displayName: data.displayName,
+      email: data.email
+    }
+    token.value = data.token
+    localStorage.setItem('token', data.token)
+    localStorage.setItem('user', JSON.stringify(user.value))
+    return data
   }
 
-  function initAuth() {
+  async function initAuth() {
+    const savedToken = localStorage.getItem('token')
     const savedUser = localStorage.getItem('user')
-    if (savedUser) {
-      user.value = JSON.parse(savedUser)
+    if (savedToken) token.value = savedToken
+    if (savedUser) user.value = JSON.parse(savedUser)
+    if (token.value && !user.value) {
+      try {
+        const me = await meApi(token.value)
+        user.value = me
+        localStorage.setItem('user', JSON.stringify(me))
+      } catch {
+        logout()
+      }
     }
   }
 

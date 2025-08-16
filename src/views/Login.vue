@@ -78,22 +78,17 @@ const error = ref('')
 const handleLogin = async () => {
   loading.value = true
   error.value = ''
-  
-  // Simulate API call
-  setTimeout(() => {
-    if (email.value && password.value) {
-      authStore.login({
-        id: 1,
-        name: email.value.split('@')[0],
-        email: email.value,
-        token: 'fake-jwt-token'
-      })
-      router.push('/game')
-    } else {
-      error.value = 'Invalid email or password'
+  try {
+    if (!email.value || !password.value) {
+      throw new Error('Email and password required')
     }
+    await authStore.login({ email: email.value, password: password.value })
+    router.push('/game')
+  } catch (e) {
+    error.value = e.message || 'Login failed'
+  } finally {
     loading.value = false
-  }, 1000)
+  }
 }
 
 const playAsGuest = () => {
